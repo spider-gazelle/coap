@@ -1,0 +1,42 @@
+require "./spec_helper"
+
+module CoAP
+  describe CoAP do
+    it "should parse a minimal message" do
+      io = IO::Memory.new(Bytes[64, 0, 0, 0])
+      msg = io.read_bytes(Message)
+      msg.version.should eq(1)
+      msg.type.should eq(Message::Type::Confirmable)
+      msg.code_class.should eq(CodeClass::Method)
+      msg.code_detail.should eq(0)
+      msg.message_id.should eq(0)
+      msg.token.empty?.should eq(true)
+      msg.options.empty?.should eq(true)
+    end
+
+    it "should parse a message with content" do
+      io = IO::Memory.new
+      io.write(Bytes[97, 69, 188, 144, 113, 68])
+      io << "abcd"
+      io.write_byte(0xFF_u8)
+      io << "temp = 22.5 C"
+      io.rewind
+
+      msg = io.read_bytes(Message)
+      msg.version.should eq(1)
+      msg.type.should eq(Message::Type::Acknowledgement)
+
+      # Codes, ref: https://github.com/chrysn/aiocoap/blob/02e18b80e7ffb765cf3f31acb66f77afc5c76cea/aiocoap/numbers/codes.py
+      msg.code_class.should eq(CodeClass::Success)
+      msg.code_detail.should eq(5) # CONTENT
+      msg.status_code.should eq(205)
+
+      msg.message_id.should eq(0xBC90)
+      String.new(msg.token).should eq("q")
+      msg.options.size.should eq(1)
+      # etag, ref: https://github.com/chrysn/aiocoap/blob/7441d0e4a3a2c281090970fb55c1f7797fa463db/aiocoap/numbers/optionnumbers.py
+      String.new(msg.options[4].to_slice).should eq("abcd")
+      String.new(msg.payload_data).should eq("temp = 22.5 C")
+    end
+  end
+end
