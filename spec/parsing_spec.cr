@@ -30,13 +30,19 @@ module CoAP
       msg.code_class.should eq(CodeClass::Success)
       msg.code_detail.should eq(5) # CONTENT
       msg.status_code.should eq(205)
+      msg.status_code = 205
+      msg.status = HTTP::Status::RESET_CONTENT
 
       msg.message_id.should eq(0xBC90)
       String.new(msg.token).should eq("q")
       msg.options.size.should eq(1)
       # etag, ref: https://github.com/chrysn/aiocoap/blob/7441d0e4a3a2c281090970fb55c1f7797fa463db/aiocoap/numbers/optionnumbers.py
-      String.new(msg.options[4].to_slice).should eq("abcd")
+      type, data = msg.options[0]
+      type.should eq(Options::ETag)
+      String.new(data).should eq("abcd")
       String.new(msg.payload_data).should eq("temp = 22.5 C")
+
+      msg.to_slice.should eq(io.to_slice)
     end
   end
 end
