@@ -4,10 +4,6 @@ module CoAP
   class Option < BinData
     endian big
 
-    # TODO
-    # Getter to store the option type once parsed
-    # so this doesn't need to be managed externally
-
     # Options
     bit_field do
       bits 4, :op_delta
@@ -53,6 +49,18 @@ module CoAP
 
     def end_of_options?
       op_delta == 0xF_u8 && op_length == 0xF_u8
+    end
+
+    # Set as the option is parsed
+    getter! type : Options
+
+    def type(@type : Options)
+      self
+    end
+
+    # Make options sortable
+    def <=>(option)
+      self.type <=> option.type
     end
 
     # https://tools.ietf.org/html/draft-ietf-core-observe-08

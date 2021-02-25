@@ -79,15 +79,14 @@ module CoAP
     end
 
     # https://tools.ietf.org/html/rfc7252#section-12.2
-    getter options : Array(Tuple(Options, Option)) do
+    getter options : Array(Option) do
       option_number = 0
       raw_options.compact_map { |option|
         next if option.end_of_options?
         option_number += option.op_delta.to_i
 
         begin
-          opt = Options.from_value(option_number)
-          {opt, option}
+          option.type Options.from_value(option_number)
         rescue error
           Log.warn(exception: error) { "unable to parse option #{option_number} with delta #{option.op_delta} data size #{option.data.size}" }
           nil
@@ -96,16 +95,16 @@ module CoAP
     end
 
     # allow for reasonablly flexible header parsing
-    def options=(values : Enumerable(Tuple(Options, Option)))
+    def options=(values : Enumerable(Option))
       option_number = 0
 
       # Exposed data
-      @options = options = values.to_a.sort { |a, b| a[0] <=> b[0] }
+      @options = options = values.to_a.sort
 
       # binary formatted
-      self.raw_options = options.map do |(header, option)|
+      self.raw_options = options.map do |option|
         # Calculate the delta
-        header_int = header.to_i
+        header_int = option.type.to_i
         delta = header_int - option_number
         option_number = header_int
 

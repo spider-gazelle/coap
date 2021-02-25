@@ -58,8 +58,8 @@ module CoAP
       String.new(msg.token).should eq("q")
       msg.options.size.should eq(1)
       # etag, ref: https://github.com/chrysn/aiocoap/blob/7441d0e4a3a2c281090970fb55c1f7797fa463db/aiocoap/numbers/optionnumbers.py
-      type, option = msg.options[0]
-      type.should eq(Options::ETag)
+      option = msg.options[0]
+      option.type.should eq(Options::ETag)
       String.new(option.data).should eq("abcd")
       String.new(msg.payload_data).should eq("temp = 22.5 C")
 
