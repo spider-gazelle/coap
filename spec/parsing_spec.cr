@@ -14,6 +14,27 @@ module CoAP
       msg.options.empty?.should eq(true)
     end
 
+    it "should parse integer options" do
+      io = IO::Memory.new(Bytes[1, 32])
+      msg = io.read_bytes(Option)
+      msg.max_age.should eq(32)
+      msg.observation.should eq(32)
+
+      msg.max_age 32
+      msg.observation 32
+
+      msg.to_slice.should eq(io.to_slice)
+    end
+
+    it "should parse content-type options" do
+      io = IO::Memory.new(Bytes[1, 42])
+      msg = io.read_bytes(Option)
+      msg.content_type.should eq("application/octet-stream")
+      msg.content_type "application/octet-stream"
+
+      msg.to_slice.should eq(io.to_slice)
+    end
+
     it "should parse a message with content" do
       io = IO::Memory.new
       io.write(Bytes[97, 69, 188, 144, 113, 68])
@@ -37,14 +58,13 @@ module CoAP
       String.new(msg.token).should eq("q")
       msg.options.size.should eq(1)
       # etag, ref: https://github.com/chrysn/aiocoap/blob/7441d0e4a3a2c281090970fb55c1f7797fa463db/aiocoap/numbers/optionnumbers.py
-      type, data = msg.options[0]
+      type, option = msg.options[0]
       type.should eq(Options::ETag)
-      String.new(data).should eq("abcd")
+      String.new(option.data).should eq("abcd")
       String.new(msg.payload_data).should eq("temp = 22.5 C")
 
       # Re-apply the options to ensure our application code works
       msg.options = msg.options
-      msg.options = [{"ETag", msg.options[0][1]}]
 
       msg.to_slice.should eq(io.to_slice)
     end

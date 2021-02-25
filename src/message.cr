@@ -79,7 +79,7 @@ module CoAP
     end
 
     # https://tools.ietf.org/html/rfc7252#section-12.2
-    getter options : Array(Tuple(Options, Bytes)) do
+    getter options : Array(Tuple(Options, Option)) do
       option_number = 0
       raw_options.compact_map { |option|
         next if option.end_of_options?
@@ -87,7 +87,7 @@ module CoAP
 
         begin
           opt = Options.from_value(option_number)
-          {opt, option.data}
+          {opt, option}
         rescue error
           Log.warn(exception: error) { "unable to parse option #{option_number} with delta #{option.op_delta} data size #{option.data.size}" }
           nil
@@ -96,43 +96,34 @@ module CoAP
     end
 
     # allow for reasonablly flexible header parsing
-    def options=(values)
+    def options=(values : Enumerable(Tuple(Options, Option)))
       option_number = 0
 
       # Exposed data
-      @options = options = values.map { |(header, data)|
-        head = case header
-               when String
-                 Options.parse(header.gsub('-', '_'))
-               when Options
-                 header
-               else
-                 raise "unknown header #{header}"
-               end
-        {head, data.to_slice}
-      }.sort { |a, b| a[0] <=> b[0] }
+      @options = options = values.to_a.sort { |a, b| a[0] <=> b[0] }
 
       # binary formatted
-      self.raw_options = options.map do |(header, data)|
+      self.raw_options = options.map do |(header, option)|
+        # Calculate the delta
         header_int = header.to_i
         delta = header_int - option_number
         option_number = header_int
 
-        option = Option.new
-        option.data = data
-        option.option_length = data.bytesize
+        # Ensure lengths are correct
+        option.option_length = option.data.bytesize
         option.option_delta = delta
         option
       end
 
-      # End of options
+      # add the end of options flags
       option = Option.new
       option.op_delta = 15_u8
       option.op_length = 15_u8
 
       self.raw_options << option
 
-      values
+      # return the options as a call to `options` would return
+      options
     end
   end
 end

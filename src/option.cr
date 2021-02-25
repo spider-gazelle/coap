@@ -4,6 +4,10 @@ module CoAP
   class Option < BinData
     endian big
 
+    # TODO
+    # Getter to store the option type once parsed
+    # so this doesn't need to be managed externally
+
     # Options
     bit_field do
       bits 4, :op_delta
@@ -49,6 +53,91 @@ module CoAP
 
     def end_of_options?
       op_delta == 0xF_u8 && op_length == 0xF_u8
+    end
+
+    # https://tools.ietf.org/html/draft-ietf-core-observe-08
+    def observation
+      # Observations are max 3 bytes
+      # https://tools.ietf.org/html/draft-ietf-core-observe-08#section-2
+      parse_integer(max_size: 3)
+    end
+
+    def observation(number : Int)
+      write_integer(number, max_size: 3)
+      self
+    end
+
+    # https://tools.ietf.org/html/rfc7252#section-12.3
+    def content_type(string : String)
+      self.data = CONTENT_FORMAT[string.split(';', 2)[0]]
+      self.option_length = self.data.size
+      self
+    end
+
+    def content_type
+      LOOKUP_FORMAT[self.data]
+    end
+
+    # https://tools.ietf.org/html/rfc7252#section-5.10
+    def max_age
+      parse_integer(max_size: 4)
+    end
+
+    def max_age(number : Int)
+      write_integer(number, max_size: 4)
+      self
+    end
+
+    # https://tools.ietf.org/html/rfc7252#section-5.10
+    def uri_port
+      parse_integer(max_size: 2)
+    end
+
+    def uri_port(number : Int)
+      write_integer(number, max_size: 2)
+      self
+    end
+
+    def string
+      String.new(data)
+    end
+
+    def string(data : String)
+      self.data = data.to_slice
+      self.option_length = self.data.size
+      self
+    end
+
+    # We need to pad the potentially small integers
+    protected def parse_integer(max_size)
+      return 0_u32 if data.size == 0
+      raise "invalid integer, size #{data.size} maximum is #{max_size}" if data.size > max_size
+
+      # we want to normalise an observation
+      buffer = IO::Memory.new(Bytes.new(4))
+      buffer.pos = 4 - data.size
+      buffer.write data
+      buffer.rewind
+      buffer.read_bytes(UInt32, IO::ByteFormat::BigEndian)
+    end
+
+    # Minimal data written
+    protected def write_integer(number, max_size)
+      buffer = IO::Memory.new(4)
+      buffer.write_bytes(number.to_u32, IO::ByteFormat::BigEndian)
+      bytes = buffer.to_slice
+
+      start = 4 - max_size
+      bytes.each_with_index do |byte, index|
+        next if index < start
+        start = index
+        break if byte > 0_u8
+      end
+
+      self.data = bytes[start..-1]
+      self.option_length = self.data.size
+
+      number
     end
   end
 end

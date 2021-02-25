@@ -11,13 +11,13 @@ module CoAP
   end
 
   enum MethodCode
-    Get    = 1
-    Post
-    Put
-    Delete
-    Fetch
-    Patch
-    IPatch
+    GET    = 1
+    POST
+    PUT
+    DELETE
+    FETCH
+    PATCH
+    IPATCH
   end
 
   # https://tools.ietf.org/html/rfc7252#section-5.10
@@ -41,6 +41,29 @@ module CoAP
     Proxy_Scheme   = 39
     Size1          = 60
   end
+
+  CONTENT_FORMAT = {} of String => Bytes
+  LOOKUP_FORMAT  = {} of Bytes => String
+
+  def self.register_format(name : String, number : UInt8 | UInt16)
+    buffer = IO::Memory.new(2)
+    buffer.write_bytes(number, IO::ByteFormat::BigEndian)
+    bytes = buffer.to_slice
+    name = name.split(';')[0]
+
+    CONTENT_FORMAT[name] = bytes
+    LOOKUP_FORMAT[bytes] = name
+  end
+
+  {
+     0_u8 => "text/plain",
+    40_u8 => "application/link-format",
+    41_u8 => "application/xml",
+    42_u8 => "application/octet-stream",
+    47_u8 => "application/exi",
+    50_u8 => "application/json",
+    60_u8 => "application/cbor",
+  }.each { |number, name| register_format(name, number) }
 end
 
 require "./message"
