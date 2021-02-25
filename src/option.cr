@@ -12,7 +12,7 @@ module CoAP
 
     {% for name in [:delta, :length] %}
       uint8 {{name}}_8bit, onlyif: ->{ op_{{name.id}} == 13_u8 }
-      uint8 {{name}}_16bit, onlyif: ->{ op_{{name.id}} == 14_u8 }
+      uint16 {{name}}_16bit, onlyif: ->{ op_{{name.id}} == 14_u8 }
 
       def option_{{name.id}} : Int32
         case op_{{name.id}}
@@ -32,13 +32,13 @@ module CoAP
         length = size.to_i
 
         if length < 13
-          op_{{name.id}} = length.to_u8
+          self.op_{{name.id}} = length.to_u8
         elsif length > 269
-          op_{{name.id}} = 14_u8
-          {{name.id}}_16bit = (length - 269).to_u16
+          self.op_{{name.id}} = 14_u8
+          self.{{name.id}}_16bit = (length - 269).to_u16
         else
-          op_{{name.id}} = 13_u8
-          {{name.id}}_8bit = (length - 13).to_u8
+          self.op_{{name.id}} = 13_u8
+          self.{{name.id}}_8bit = (length - 13).to_u8
         end
 
         size

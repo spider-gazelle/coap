@@ -97,7 +97,10 @@ module CoAP
 
     # allow for reasonablly flexible header parsing
     def options=(values)
-      values.map { |(header, data)|
+      option_number = 0
+
+      # Exposed data
+      @options = options = values.map { |(header, data)|
         head = case header
                when String
                  Options.parse(header.gsub('-', '_'))
@@ -106,10 +109,29 @@ module CoAP
                else
                  raise "unknown header #{header}"
                end
-        {header, data.to_slice}
-      }.sort { |a, b| a[0] <=> b[0] }.each do |(header, data)|
+        {head, data.to_slice}
+      }.sort { |a, b| a[0] <=> b[0] }
 
+      # binary formatted
+      self.raw_options = options.map do |(header, data)|
+        header_int = header.to_i
+        delta = header_int - option_number
+        option_number = header_int
+
+        option = Option.new
+        option.data = data
+        option.option_length = data.bytesize
+        option.option_delta = delta
+        option
       end
+
+      # End of options
+      option = Option.new
+      option.op_delta = 15_u8
+      option.op_length = 15_u8
+
+      self.raw_options << option
+
       values
     end
   end

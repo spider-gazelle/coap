@@ -42,6 +42,10 @@ module CoAP
       String.new(data).should eq("abcd")
       String.new(msg.payload_data).should eq("temp = 22.5 C")
 
+      # Re-apply the options to ensure our application code works
+      msg.options = msg.options
+      msg.options = [{"ETag", msg.options[0][1]}]
+
       msg.to_slice.should eq(io.to_slice)
     end
   end
