@@ -21,7 +21,7 @@ class CoAP::Request < HTTP::Request
 
     if origin = self.headers.delete("Origin")
       uri = URI.parse origin
-      port = uri.port || DEFAULT_PORTS[uri.scheme.try &.downcase]
+      port = uri.port || URI.default_port(uri.scheme.not_nil!.downcase) || raise("unable to infer CoAP port for #{origin}")
 
       options << CoAP::Option.new.string(uri.host.not_nil!).type(CoAP::Options::Uri_Host)
       options << CoAP::Option.new.uri_port(port).type(CoAP::Options::Uri_Port)

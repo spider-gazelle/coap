@@ -1,5 +1,9 @@
 require "bindata"
 require "log"
+require "uri"
+
+URI.set_default_port "coap", 5683
+URI.set_default_port "coaps", 5684
 
 module CoAP
   Log = ::Log.for("coap")
@@ -45,10 +49,6 @@ module CoAP
     Size1          = 60
   end
 
-  DEFAULT_PORTS = {
-    "coap"  => 5683,
-    "coaps" => 5684,
-  }
   CONTENT_FORMAT = {} of String => Bytes
   LOOKUP_FORMAT  = {} of Bytes => String
 
