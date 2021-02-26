@@ -1,6 +1,9 @@
 require "bindata"
+require "log"
 
 module CoAP
+  Log = ::Log.for("coap")
+
   enum CodeClass
     # Method == request such as Get post etc defined below
     Method      = 0
@@ -42,6 +45,10 @@ module CoAP
     Size1          = 60
   end
 
+  DEFAULT_PORTS = {
+    "coap"  => 5683,
+    "coaps" => 5684,
+  }
   CONTENT_FORMAT = {} of String => Bytes
   LOOKUP_FORMAT  = {} of Bytes => String
 
@@ -67,3 +74,4 @@ module CoAP
 end
 
 require "./message"
+require "./client"
