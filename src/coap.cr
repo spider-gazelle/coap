@@ -49,27 +49,24 @@ module CoAP
     Size1          = 60
   end
 
-  CONTENT_FORMAT = {} of String => Bytes
-  LOOKUP_FORMAT  = {} of Bytes => String
+  CONTENT_FORMAT = {} of String => UInt16
+  LOOKUP_FORMAT  = {} of UInt16 => String
 
-  def self.register_format(name : String, number : UInt8 | UInt16)
-    buffer = IO::Memory.new(2)
-    buffer.write_bytes(number, IO::ByteFormat::BigEndian)
-    bytes = buffer.to_slice
+  def self.register_format(name : String, number : UInt16)
     name = name.split(';')[0]
 
-    CONTENT_FORMAT[name] = bytes
-    LOOKUP_FORMAT[bytes] = name
+    CONTENT_FORMAT[name] = number
+    LOOKUP_FORMAT[number] = name
   end
 
   {
-     0_u8 => "text/plain",
-    40_u8 => "application/link-format",
-    41_u8 => "application/xml",
-    42_u8 => "application/octet-stream",
-    47_u8 => "application/exi",
-    50_u8 => "application/json",
-    60_u8 => "application/cbor",
+     0_u16 => "text/plain",
+    40_u16 => "application/link-format",
+    41_u16 => "application/xml",
+    42_u16 => "application/octet-stream",
+    47_u16 => "application/exi",
+    50_u16 => "application/json",
+    60_u16 => "application/cbor",
   }.each { |number, name| register_format(name, number) }
 end
 

@@ -18,8 +18,10 @@ class CoAP::Response < HTTP::Client::Response
         headers.add(header_key, option.max_age.to_s)
       when .content_format?, .accept?
         headers.add(header_key, option.content_type)
-      when .uri_host?, .uri_path?, .uri_query?, .location_path?, .location_query?, .proxy_uri?, .proxy_scheme?, .e_tag?
+      when .uri_host?, .uri_path?, .uri_query?, .location_path?, .location_query?, .proxy_uri?, .proxy_scheme?
         headers.add(header_key, option.string)
+      when .e_tag?
+        headers.add(header_key, option.data.hexstring)
       else
         Log.warn { "unexpected CoAP header: #{option.type}" }
       end

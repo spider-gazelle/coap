@@ -11,20 +11,23 @@ class CoAP::Request < HTTP::Request
 
   delegate message_id, "message_id=", token, version, to: message
 
+  # ameba:disable Metrics/CyclomaticComplexity
   def to_coap(message_type : CoAP::Message::Type = :confirmable)
     message.type = message_type
     message.code_class = :method
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
 
-    options = [CoAP::Option.new.string(self.path).type(CoAP::Options::Uri_Path)]
+    # Remove the first `/`
+    options = [CoAP::Option.new.string(self.path[1..-1]).type(CoAP::Options::Uri_Path)]
     options << CoAP::Option.new.string(self.query.not_nil!).type(CoAP::Options::Uri_Query) if self.query.presence
 
     if origin = self.headers.delete("Origin")
       uri = URI.parse origin
-      port = uri.port || URI.default_port(uri.scheme.not_nil!.downcase) || raise("unable to infer CoAP port for #{origin}")
+      default_port = URI.default_port(uri.scheme.not_nil!.downcase)
+      port = uri.port || default_port || raise("unable to infer CoAP port for #{origin}")
 
       options << CoAP::Option.new.string(uri.host.not_nil!).type(CoAP::Options::Uri_Host)
-      options << CoAP::Option.new.uri_port(port).type(CoAP::Options::Uri_Port)
+      options << CoAP::Option.new.uri_port(port).type(CoAP::Options::Uri_Port) unless port == default_port
     else
       raise "no 'Origin' header provided"
     end
@@ -40,7 +43,7 @@ class CoAP::Request < HTTP::Request
       case option
       when .if_none_match?, .observe?
         # empty
-        values.each { |data| options << CoAP::Option.new.type(option) }
+        values.each { |_data| options << CoAP::Option.new.type(option) }
       when .content_format?, .accept?
         values.each { |data| options << CoAP::Option.new.content_type(data).type(option) }
       when .max_age?, .size1?
@@ -51,8 +54,6 @@ class CoAP::Request < HTTP::Request
         Log.warn { "unexpected CoAP request header: #{header}" }
       end
     end
-
-    message.options = options
 
     # Read the data out of the IO
     self.body.try do |data|
@@ -70,6 +71,10 @@ class CoAP::Request < HTTP::Request
       end
       message.payload_data = buffer.to_slice
     end
+
+    # Set options after payload is configured
+    # as we need to know if we need the "end of options" option flag
+    message.options = options
 
     message
   end

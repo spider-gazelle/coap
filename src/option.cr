@@ -77,13 +77,13 @@ module CoAP
 
     # https://tools.ietf.org/html/rfc7252#section-12.3
     def content_type(string : String)
-      self.data = CONTENT_FORMAT[string.split(';', 2)[0]]
-      self.option_length = self.data.size
+      number = CONTENT_FORMAT[string.split(';', 2)[0]]
+      write_integer(number, max_size: 2)
       self
     end
 
     def content_type
-      LOOKUP_FORMAT[self.data]
+      LOOKUP_FORMAT[parse_integer(max_size: 2).to_u16]
     end
 
     # https://tools.ietf.org/html/rfc7252#section-5.10
@@ -131,20 +131,24 @@ module CoAP
 
     # Minimal data written
     protected def write_integer(number, max_size)
-      buffer = IO::Memory.new(4)
-      buffer.write_bytes(number.to_u32, IO::ByteFormat::BigEndian)
-      bytes = buffer.to_slice
+      if number == 0
+        self.data = Bytes.new(0)
+        self.option_length = 0
+      else
+        buffer = IO::Memory.new(4)
+        buffer.write_bytes(number.to_u32, IO::ByteFormat::BigEndian)
+        bytes = buffer.to_slice
 
-      start = 4 - max_size
-      bytes.each_with_index do |byte, index|
-        next if index < start
-        start = index
-        break if byte > 0_u8
+        start = 4 - max_size
+        bytes.each_with_index do |byte, index|
+          next if index < start
+          start = index
+          break if byte > 0_u8
+        end
+
+        self.data = bytes[start..-1]
+        self.option_length = self.data.size
       end
-
-      self.data = bytes[start..-1]
-      self.option_length = self.data.size
-
       number
     end
   end
