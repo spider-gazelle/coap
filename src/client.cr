@@ -130,14 +130,18 @@ class CoAP::Client
   def exec(request : CoAP::Request) : CoAP::Response
     headers = request.headers
     headers["Origin"] = "#{@tls ? "coaps" : "coap"}://#{@host}:#{@port}" unless headers["Origin"]?
-    request.message_id ||= next_message_id
-    request.token ||= Bytes[next_token]
 
+    # setup tracking if at defaults
+    request.message_id = next_message_id if request.message_id == 0_u16
+    request.token = Bytes[next_token] if request.token.empty?
+
+    # send the request
     message = request.to_coap
     socket = io
     socket.write_bytes(message)
     socket.flush
 
+    # parse the response
     message = socket.read_bytes(CoAP::Message)
 
     # Check if we've been sent a "please wait response"
