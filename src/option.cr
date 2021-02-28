@@ -63,6 +63,11 @@ module CoAP
       self.type <=> option.type
     end
 
+    def data(value)
+      @data = value
+      self
+    end
+
     # https://tools.ietf.org/html/draft-ietf-core-observe-08
     def observation
       # Observations are max 3 bytes

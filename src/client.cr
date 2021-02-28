@@ -8,6 +8,7 @@ class CoAP::Client
   alias TLSContext = OpenSSL::SSL::Context::Client | Bool | Nil
 
   @read_timeout : Float64?
+  @write_timeout : Float64?
 
   def initialize(@host : String, port = nil, tls : TLSContext = nil)
     @tls = case tls
@@ -29,40 +30,134 @@ class CoAP::Client
     self.new(uri.host.not_nil!, port, tls)
   end
 
+  @io : UDPSocket | OpenSSL::SSL::Socket::Client | Nil = nil
+
   private def io
+    io = @io
+    return io if io
+
     hostname = @host.starts_with?('[') && @host.ends_with?(']') ? @host[1..-2] : @host
 
     io = UDPSocket.new
     io.connect hostname, @port
+    io.read_timeout = @read_timeout if @read_timeout
+    io.write_timeout = @write_timeout if @write_timeout
     io.sync = false
 
     if tls = @tls
-      tcp_socket = io
+      udp_socket = io
       begin
-        io = OpenSSL::SSL::Socket::Client.new(tcp_socket, context: tls, sync_close: true, hostname: @host)
-      rescue exc
+        io = OpenSSL::SSL::Socket::Client.new(udp_socket, context: tls, sync_close: true, hostname: @host)
+      rescue error
+        Log.error(exception: error) { "starting dtls" }
         # don't leak the TCP socket when the SSL connection failed
-        tcp_socket.close
-        raise exc
+        udp_socket.close
+        raise error
       end
     end
 
-    io
+    @io = io
   end
 
-  def exec(request : CoAP::Request) : CoAP::Response
-    # TODO:: add port where required
-    request.headers["Origin"] = "#{@tls ? "coaps" : "coap"}://#{@host}"
+  # Sets the number of seconds to wait when reading before raising an `IO::TimeoutError`.
+  #
+  # ```
+  # require "http/client"
+  #
+  # client = HTTP::Client.new("example.org")
+  # client.read_timeout = 1.5
+  # begin
+  #   response = client.get("/")
+  # rescue IO::TimeoutError
+  #   puts "Timeout!"
+  # end
+  # ```
+  def read_timeout=(read_timeout : Number)
+    @read_timeout = read_timeout.to_f
+  end
 
-    # TODO:: proper message IDs
-    request.message_id = 15901_u16
+  # Sets the read timeout with a `Time::Span`, to wait when reading before raising an `IO::TimeoutError`.
+  #
+  # ```
+  # require "http/client"
+  #
+  # client = HTTP::Client.new("example.org")
+  # client.read_timeout = 5.minutes
+  # begin
+  #   response = client.get("/")
+  # rescue IO::TimeoutError
+  #   puts "Timeout!"
+  # end
+  # ```
+  def read_timeout=(read_timeout : Time::Span)
+    self.read_timeout = read_timeout.total_seconds
+  end
+
+  # Sets the write timeout - if any chunk of request is not written
+  # within the number of seconds provided, `IO::TimeoutError` exception is raised.
+  def write_timeout=(write_timeout : Number)
+    @write_timeout = write_timeout.to_f
+  end
+
+  # Sets the write timeout - if any chunk of request is not written
+  # within the provided `Time::Span`,  `IO::TimeoutError` exception is raised.
+  def write_timeout=(write_timeout : Time::Span)
+    self.write_timeout = write_timeout.total_seconds
+  end
+
+  @message_id : UInt16 = rand(UInt16::MAX).to_u16
+
+  private def next_message_id
+    @message_id += rand(10).to_u16
+  rescue OverflowError
+    @message_id = rand(UInt16::MAX).to_u16
+  ensure
+    @message_id
+  end
+
+  @token : UInt8 = rand(UInt8::MAX).to_u8
+
+  private def next_token
+    @token += rand(5).to_u8
+  rescue OverflowError
+    @token = rand(UInt8::MAX).to_u8
+  ensure
+    @token
+  end
+
+  # TODO:: allow this to handle multiple requests at once, including observes
+  # requires channels for each message_id and a fiber for response processing
+  def exec(request : CoAP::Request) : CoAP::Response
+    headers = request.headers
+    headers["Origin"] = "#{@tls ? "coaps" : "coap"}://#{@host}:#{@port}" unless headers["Origin"]?
+    request.message_id ||= next_message_id
+    request.token ||= Bytes[next_token]
+
     message = request.to_coap
     socket = io
     socket.write_bytes(message)
     socket.flush
 
-    # TODO:: timeouts
     message = socket.read_bytes(CoAP::Message)
+
+    # Check if we've been sent a "please wait response"
+    # https://tools.ietf.org/html/rfc7252#page-107
+    send_ack = false
+    if message.code_class == CoAP::CodeClass::Method && message.token != request.token
+      send_ack = true
+      message = socket.read_bytes(CoAP::Message)
+      raise "unexpected message" unless message.token == request.token
+    end
+
+    # acknowledge the response if it was delayed and confirmable
+    if send_ack && message.type == CoAP::Message::Type::Confirmable
+      ack = CoAP::Message.new
+      ack.type = :acknowledgement
+      ack.message_id = message.message_id
+      socket.write_bytes(ack)
+      socket.flush
+    end
+
     CoAP::Response.from_coap(message)
   end
 end

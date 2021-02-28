@@ -48,8 +48,16 @@ class CoAP::Request < HTTP::Request
         values.each { |data| options << CoAP::Option.new.content_type(data).type(option) }
       when .max_age?, .size1?
         values.each { |data| options << CoAP::Option.new.max_age(data.to_u32).type(option) }
-      when .proxy_uri?, .proxy_scheme?, .if_match?, .e_tag?
+      when .proxy_uri?, .proxy_scheme?
         values.each { |data| options << CoAP::Option.new.string(data).type(option) }
+      when .if_match?, .e_tag?
+        values.each do |data|
+          if raw = data.hexbytes?
+            options << CoAP::Option.new.data(raw).type(option)
+          else
+            options << CoAP::Option.new.string(data).type(option)
+          end
+        end
       else
         Log.warn { "unexpected CoAP request header: #{header}" }
       end
