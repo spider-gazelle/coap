@@ -72,13 +72,22 @@ module CoAP
       response.body.should eq("welcome to the ETSI plugtest! last change: 2021-02-28 13:31:28 UTC")
     end
 
-    it "should make a coap request" do
+    it "should make a coap GET request" do
       client = CoAP::Client.new(URI.parse("coap://coap.me"))
       response = client.exec(CoAP::Request.new("get", "/test"))
 
       response.status_code.should eq(205)
       response.headers["Content-Format"].should eq("text/plain")
       response.body.should start_with("welcome to the ETSI plugtest!")
+    end
+
+    it "should make a coap PUT request" do
+      client = CoAP::Client.new(URI.parse("coap://coap.me"))
+      response = client.exec(CoAP::Request.new("put", "/sink", body: "12345"))
+
+      response.status_code.should eq(204)
+      response.headers["Content-Format"].should eq("text/plain")
+      response.body.should eq("PUT OK")
     end
   end
 end

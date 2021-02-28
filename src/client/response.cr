@@ -9,7 +9,10 @@ class CoAP::Response < HTTP::Client::Response
     raise "expected a response not a request message" if message.code_class == CoAP::CodeClass::Method
     status_code = message.status_code.to_i
 
-    headers = HTTP::Headers.new
+    headers = HTTP::Headers{
+      # crystal HTTP response object needs this to handle unexpected bodies
+      "Content-Length" => "0",
+    }
     message.options.each do |option|
       header_key = option.type.to_s.gsub('_', '-')
 
