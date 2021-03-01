@@ -27,6 +27,7 @@ class CoAP::Response < HTTP::Client::Response
         headers.add(header_key, option.data.hexstring)
       else
         Log.warn { "unexpected CoAP header: #{option.type}" }
+        headers.add(header_key, option.data.hexstring)
       end
     end
 
