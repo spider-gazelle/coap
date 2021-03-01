@@ -98,5 +98,14 @@ module CoAP
       response.headers["Content-Format"].should eq("text/plain")
       response.body.should eq("TD_CORE_COAP_09 sub1")
     end
+
+    it "should handle a delayed response" do
+      client = CoAP::Client.new(URI.parse("coap://coap.me"))
+      response = client.exec(CoAP::Request.new("get", "/separate"))
+
+      response.status_code.should eq(205)
+      response.headers["Content-Format"].should eq("text/plain")
+      response.body.should eq("That took a long time")
+    end
   end
 end
