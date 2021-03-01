@@ -33,6 +33,7 @@ module CoAP
     Uri_Host       =  3
     ETag           =  4
     If_None_Match  =  5
+    # https://tools.ietf.org/html/rfc7641
     Observe        =  6
     Uri_Port       =  7
     Location_Path  =  8
@@ -42,6 +43,7 @@ module CoAP
     Uri_Query      = 15
     Accept         = 17
     Location_Query = 20
+    # https://tools.ietf.org/html/rfc7959#section-1
     Block2         = 23
     Block1         = 27
     Proxy_Uri      = 35

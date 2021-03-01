@@ -107,5 +107,18 @@ module CoAP
       response.headers["Content-Format"].should eq("text/plain")
       response.body.should eq("That took a long time")
     end
+
+    it "provides callbacks to modify the request" do
+      client = CoAP::Client.new(URI.parse("coap://coap.me"))
+      before_req = 0
+      before_mes = 0
+      client.before_request { |_request| before_req += 1 }
+      client.before_transmit { |_message| before_mes += 1 }
+      response = client.exec(CoAP::Request.new("get", "/test"))
+
+      response.status_code.should eq(205)
+      before_req.should eq(1)
+      before_mes.should eq(1)
+    end
   end
 end

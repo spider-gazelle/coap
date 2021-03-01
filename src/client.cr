@@ -125,9 +125,21 @@ class CoAP::Client
     @token
   end
 
+  def before_request(&callback : CoAP::Request ->)
+    before_request = @before_request ||= [] of (CoAP::Request ->)
+    before_request << callback
+  end
+
+  def before_transmit(&callback : CoAP::Message ->)
+    before_transmit = @before_transmit ||= [] of (CoAP::Message ->)
+    before_transmit << callback
+  end
+
   # TODO:: allow this to handle multiple requests at once, including observes
   # requires channels for each message_id and a fiber for response processing
   def exec(request : CoAP::Request) : CoAP::Response
+    @before_request.try &.each &.call(request)
+
     headers = request.headers
     headers["Origin"] = "#{@tls ? "coaps" : "coap"}://#{@host}:#{@port}" unless headers["Origin"]?
 
@@ -137,6 +149,8 @@ class CoAP::Client
 
     # send the request
     message = request.to_coap
+    @before_transmit.try &.each &.call(message)
+
     socket = io
     socket.write_bytes(message)
     socket.flush
