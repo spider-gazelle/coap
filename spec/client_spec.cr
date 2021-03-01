@@ -89,5 +89,14 @@ module CoAP
       response.headers["Content-Format"].should eq("text/plain")
       response.body.should eq("PUT OK")
     end
+
+    it "should get a deep sub path" do
+      client = CoAP::Client.new(URI.parse("coap://coap.me"))
+      response = client.exec(CoAP::Request.new("get", "/path/sub1"))
+
+      response.status_code.should eq(205)
+      response.headers["Content-Format"].should eq("text/plain")
+      response.body.should eq("TD_CORE_COAP_09 sub1")
+    end
   end
 end

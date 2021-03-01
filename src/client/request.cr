@@ -17,9 +17,7 @@ class CoAP::Request < HTTP::Request
     message.code_class = :method
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
 
-    # Remove the first `/`
-    path = self.path.starts_with?('/') ? self.path[1..-1] : self.path
-    options = [CoAP::Option.new.string(path).type(CoAP::Options::Uri_Path)]
+    options = self.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
     options << CoAP::Option.new.string(self.query.not_nil!).type(CoAP::Options::Uri_Query) if self.query.presence
 
     if origin = self.headers.delete("Origin")
