@@ -15,9 +15,9 @@ module CoAP
       message.token.size.should eq(0)
       message.payload_data.size.should eq(0)
 
-      message.options.find { |opt| opt.type == Options::Uri_Host }.try &.string.should eq("test.server.com")
-      message.options.find { |opt| opt.type == Options::Uri_Path }.try &.string.should eq("testing")
-      message.options.select { |opt| opt.type == Options::Uri_Query }.empty?.should eq(true)
+      message.options.find(&.type.uri_host?).try &.string.should eq("test.server.com")
+      message.options.find(&.type.uri_path?).try &.string.should eq("testing")
+      message.options.select(&.type.uri_query?).empty?.should eq(true)
     end
 
     it "should generate a complex coap request" do
@@ -35,10 +35,10 @@ module CoAP
       message.token.size.should eq(0)
       String.new(message.payload_data).should eq %({"temp": "22.5 C"})
 
-      message.options.find { |opt| opt.type == Options::Uri_Host }.try &.string.should eq("test.server.com")
-      message.options.find { |opt| opt.type == Options::Uri_Path }.try &.string.should eq("testing")
-      message.options.find { |opt| opt.type == Options::Uri_Query }.try &.string.should eq("arg=1")
-      message.options.find { |opt| opt.type == Options::Content_Format }.try &.content_type.should eq("application/json")
+      message.options.find(&.type.uri_host?).try &.string.should eq("test.server.com")
+      message.options.find(&.type.uri_path?).try &.string.should eq("testing")
+      message.options.find(&.type.uri_query?).try &.string.should eq("arg=1")
+      message.options.find(&.type.content_format?).try &.content_type.should eq("application/json")
     end
 
     it "should generate a response object based on a CoAP message" do
@@ -74,7 +74,7 @@ module CoAP
 
     it "should make a coap GET request" do
       client = CoAP::Client.new(URI.parse("coap://coap.me"))
-      response = client.exec(CoAP::Request.new("get", "/test"))
+      response = client.exec!(CoAP::Request.new("get", "/test")).receive
 
       response.status_code.should eq(205)
       response.headers["Content-Format"].should eq("text/plain")
@@ -83,7 +83,7 @@ module CoAP
 
     it "should make a coap PUT request" do
       client = CoAP::Client.new(URI.parse("coap://coap.me"))
-      response = client.exec(CoAP::Request.new("put", "/sink", body: "12345"))
+      response = client.exec!(CoAP::Request.new("put", "/sink", body: "12345")).receive
 
       response.status_code.should eq(204)
       response.headers["Content-Format"].should eq("text/plain")
@@ -92,7 +92,7 @@ module CoAP
 
     it "should get a deep sub path" do
       client = CoAP::Client.new(URI.parse("coap://coap.me"))
-      response = client.exec(CoAP::Request.new("get", "/path/sub1"))
+      response = client.exec!(CoAP::Request.new("get", "/path/sub1")).receive
 
       response.status_code.should eq(205)
       response.headers["Content-Format"].should eq("text/plain")
@@ -101,7 +101,7 @@ module CoAP
 
     it "should handle a delayed response" do
       client = CoAP::Client.new(URI.parse("coap://coap.me"))
-      response = client.exec(CoAP::Request.new("get", "/separate"))
+      response = client.exec!(CoAP::Request.new("get", "/separate")).receive
 
       response.status_code.should eq(205)
       response.headers["Content-Format"].should eq("text/plain")
@@ -114,7 +114,7 @@ module CoAP
       before_mes = 0
       client.before_request { |_request| before_req += 1 }
       client.before_transmit { |_message| before_mes += 1 }
-      response = client.exec(CoAP::Request.new("get", "/test"))
+      response = client.exec!(CoAP::Request.new("get", "/test")).receive
 
       response.status_code.should eq(205)
       before_req.should eq(1)

@@ -4,7 +4,7 @@ version: 1.0.0
 dependencies:
   bindata:
     github: spider-gazelle/bindata
-    version: ~> 1.6
+    version: ~> 1.8
 
 development_dependencies:
   ameba:

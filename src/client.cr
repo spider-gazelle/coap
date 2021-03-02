@@ -7,8 +7,8 @@ class CoAP::Client
   getter! tls : OpenSSL::SSL::Context::Client
   alias TLSContext = OpenSSL::SSL::Context::Client | Bool | Nil
 
-  @read_timeout : Float64?
-  @write_timeout : Float64?
+  # default CoAP timeout
+  @read_timeout : Float64 = 2.0
 
   def initialize(@host : String, port = nil, tls : TLSContext = nil)
     @tls = case tls
@@ -30,79 +30,54 @@ class CoAP::Client
     self.new(uri.host.not_nil!, port, tls)
   end
 
-  @io : UDPSocket | OpenSSL::SSL::Socket::Client | Nil = nil
+  @mutex = Mutex.new(:reentrant)
+  @io : IO | Nil = nil
 
-  private def io
+  def io=(transport : IO)
+    @mutex.synchronize { @io = transport }
+  end
+
+  private def io : IO
     io = @io
     return io if io
 
-    hostname = @host.starts_with?('[') && @host.ends_with?(']') ? @host[1..-2] : @host
+    @mutex.synchronize {
+      io = @io
+      return io if io
 
-    io = UDPSocket.new
-    io.connect hostname, @port
-    io.read_timeout = @read_timeout if @read_timeout
-    io.write_timeout = @write_timeout if @write_timeout
-    io.sync = false
+      hostname = @host.starts_with?('[') && @host.ends_with?(']') ? @host[1..-2] : @host
 
-    if tls = @tls
-      udp_socket = io
-      begin
-        io = OpenSSL::SSL::Socket::Client.new(udp_socket, context: tls, sync_close: true, hostname: @host)
-      rescue error
-        Log.error(exception: error) { "starting dtls" }
-        # don't leak the TCP socket when the SSL connection failed
-        udp_socket.close
-        raise error
+      io = UDPSocket.new
+      io.connect hostname, @port
+      io.sync = false
+
+      if tls = @tls
+        udp_socket = io
+        begin
+          io = OpenSSL::SSL::Socket::Client.new(udp_socket, context: tls, sync_close: true, hostname: @host)
+        rescue error
+          Log.error(exception: error) { "starting dtls" }
+          # don't leak the TCP socket when the SSL connection failed
+          udp_socket.close
+          raise error
+        end
       end
-    end
 
-    @io = io
+      @io = io
+      spawn { consume_io }
+      spawn { perform_timeouts }
+      io
+    }
   end
 
   # Sets the number of seconds to wait when reading before raising an `IO::TimeoutError`.
-  #
-  # ```
-  # require "http/client"
-  #
-  # client = HTTP::Client.new("example.org")
-  # client.read_timeout = 1.5
-  # begin
-  #   response = client.get("/")
-  # rescue IO::TimeoutError
-  #   puts "Timeout!"
-  # end
-  # ```
   def read_timeout=(read_timeout : Number)
     @read_timeout = read_timeout.to_f
   end
 
   # Sets the read timeout with a `Time::Span`, to wait when reading before raising an `IO::TimeoutError`.
-  #
-  # ```
-  # require "http/client"
-  #
-  # client = HTTP::Client.new("example.org")
-  # client.read_timeout = 5.minutes
-  # begin
-  #   response = client.get("/")
-  # rescue IO::TimeoutError
-  #   puts "Timeout!"
-  # end
-  # ```
   def read_timeout=(read_timeout : Time::Span)
     self.read_timeout = read_timeout.total_seconds
-  end
-
-  # Sets the write timeout - if any chunk of request is not written
-  # within the number of seconds provided, `IO::TimeoutError` exception is raised.
-  def write_timeout=(write_timeout : Number)
-    @write_timeout = write_timeout.to_f
-  end
-
-  # Sets the write timeout - if any chunk of request is not written
-  # within the provided `Time::Span`,  `IO::TimeoutError` exception is raised.
-  def write_timeout=(write_timeout : Time::Span)
-    self.write_timeout = write_timeout.total_seconds
   end
 
   @message_id : UInt16 = rand(UInt16::MAX).to_u16
@@ -110,7 +85,7 @@ class CoAP::Client
   private def next_message_id
     @message_id += rand(10).to_u16
   rescue OverflowError
-    @message_id = rand(UInt16::MAX).to_u16
+    @message_id = rand(10).to_u16
   ensure
     @message_id
   end
@@ -120,7 +95,7 @@ class CoAP::Client
   private def next_token
     @token += rand(5).to_u8
   rescue OverflowError
-    @token = rand(UInt8::MAX).to_u8
+    @token = rand(5).to_u8
   ensure
     @token
   end
@@ -137,45 +112,114 @@ class CoAP::Client
 
   # TODO:: allow this to handle multiple requests at once, including observes
   # requires channels for each message_id and a fiber for response processing
-  def exec(request : CoAP::Request) : CoAP::Response
+  def exec(request : CoAP::Request) : CoAP::ResponseHandler?
     @before_request.try &.each &.call(request)
 
     headers = request.headers
     headers["Origin"] = "#{@tls ? "coaps" : "coap"}://#{@host}:#{@port}" unless headers["Origin"]?
 
-    # setup tracking if at defaults
-    request.message_id = next_message_id if request.message_id == 0_u16
-    request.token = Bytes[next_token] if request.token.empty?
-
     # send the request
     message = request.to_coap
     @before_transmit.try &.each &.call(message)
 
-    socket = io
-    socket.write_bytes(message)
-    socket.flush
+    # setup tracking if at defaults
+    message.message_id = next_message_id if message.message_id == 0_u16
+    message.token = Bytes[next_token] if message.token.empty? && message.type.confirmable?
 
-    # parse the response
-    message = socket.read_bytes(CoAP::Message)
+    transmit(message)
+  end
 
-    # Check if we've been sent a "please wait response"
-    # https://tools.ietf.org/html/rfc7252#page-107
-    send_ack = false
-    if message.code_class == CoAP::CodeClass::Method && message.token != request.token
-      send_ack = true
-      message = socket.read_bytes(CoAP::Message)
-      raise "unexpected message" unless message.token == request.token
-    end
+  def exec!(request : CoAP::Request) : CoAP::ResponseHandler
+    exec(request).not_nil!
+  end
 
-    # acknowledge the response if it was delayed and confirmable
-    if send_ack && message.type == CoAP::Message::Type::Confirmable
-      ack = CoAP::Message.new
-      ack.type = :acknowledgement
-      ack.message_id = message.message_id
-      socket.write_bytes(ack)
+  # message_id => token id
+  @messages = {} of UInt16 => Bytes
+
+  # token id => message + timeout
+  @tokens = {} of Bytes => ResponseHandler
+
+  protected def transmit(message)
+    response = nil
+    @mutex.synchronize {
+      if !message.token.empty? && message.type.confirmable?
+        response = ResponseHandler.new message.message_id, @read_timeout.seconds.from_now
+        @tokens[message.token] = response
+        @messages[message.message_id] = message.token
+      end
+
+      socket = io
+      socket.write_bytes(message)
       socket.flush
-    end
+    }
+    response
+  end
 
-    CoAP::Response.from_coap(message)
+  private def consume_io
+    if socket = @io
+      while !socket.closed?
+        message = socket.read_bytes(CoAP::Message)
+
+        # Check we were expecting this message
+        token_id = @mutex.synchronize { @messages.delete(message.message_id) }
+
+        if !message.token.empty?
+          # if it has a token then we probably were expecting this
+          if responder = @mutex.synchronize { @tokens[message.token]? }
+            responder.send(message)
+          else
+            Log.info { "CoAP message #{message.message_id}, token #{message.token.hexstring} possibly received after timeout" }
+          end
+
+          if message.type.confirmable?
+            ack = CoAP::Message.new
+            ack.type = :acknowledgement
+            ack.message_id = message.message_id
+
+            @mutex.synchronize {
+              socket.write_bytes(ack)
+              socket.flush
+            }
+          end
+        elsif token_id && message.code_class.method?
+          # we were tracking the message ID so probably the service is taking time to return the result
+          # we want to increase the timeout for the token tracking https://tools.ietf.org/html/rfc7252#page-107
+          @mutex.synchronize {
+            if responder = @tokens[token_id]?
+              responder.timeout = (@read_timeout * 5).seconds.from_now
+            else
+              Log.info { "tracked CoAP message #{message.message_id}, token #{token_id}  received after timeout" }
+            end
+          }
+        else
+          # we were not expecting this message
+          Log.info { "received unexpected CoAP message #{message.type} #{message.message_id}" }
+        end
+      end
+    end
+  rescue error
+    Log.error(exception: error) { "error consuming IO" }
+  ensure
+    close
+  end
+
+  def close : Nil
+    @mutex.synchronize {
+      @io.try(&.close)
+      @io = nil
+
+      # close all the channels
+      @tokens.each_value(&.close)
+      @tokens.clear
+      @messages.clear
+    }
+  end
+
+  def closed?
+    @io.try(&.closed?) || true
+  end
+
+  def perform_timeouts
+    # TODO::
   end
 end

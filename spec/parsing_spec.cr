@@ -2,6 +2,18 @@ require "./spec_helper"
 
 module CoAP
   describe CoAP do
+    it "should parse an observation rejection message" do
+      io = IO::Memory.new("7000aa0f".hexbytes)
+      msg = io.read_bytes(Message)
+      msg.version.should eq(1)
+      msg.type.should eq(Message::Type::Reset)
+      msg.code_class.should eq(CodeClass::Method)
+      msg.code_detail.should eq(0)
+      msg.message_id.should eq(43535)
+      msg.token.empty?.should eq(true)
+      msg.options.empty?.should eq(true)
+    end
+
     it "should parse a minimal message" do
       io = IO::Memory.new(Bytes[64, 0, 0, 0])
       msg = io.read_bytes(Message)

@@ -29,10 +29,10 @@ module CoAP
 
   # https://tools.ietf.org/html/rfc7252#section-5.10
   enum Options
-    If_Match       =  1
-    Uri_Host       =  3
-    ETag           =  4
-    If_None_Match  =  5
+    If_Match      = 1
+    Uri_Host      = 3
+    ETag          = 4
+    If_None_Match = 5
     # https://tools.ietf.org/html/rfc7641
     Observe        =  6
     Uri_Port       =  7
@@ -44,11 +44,11 @@ module CoAP
     Accept         = 17
     Location_Query = 20
     # https://tools.ietf.org/html/rfc7959#section-1
-    Block2         = 23
-    Block1         = 27
-    Proxy_Uri      = 35
-    Proxy_Scheme   = 39
-    Size1          = 60
+    Block2       = 23
+    Block1       = 27
+    Proxy_Uri    = 35
+    Proxy_Scheme = 39
+    Size1        = 60
   end
 
   CONTENT_FORMAT = {} of String => UInt16

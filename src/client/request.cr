@@ -2,19 +2,22 @@ require "../coap"
 require "http"
 
 class CoAP::Request < HTTP::Request
-  getter message : CoAP::Message = CoAP::Message.new
+  getter message : CoAP::Message {
+    message = CoAP::Message.new
+    message.type = :confirmable
+    message.code_class = :method
+    message
+  }
 
   def token=(value)
     message.token = value.to_slice
     value
   end
 
-  delegate message_id, "message_id=", token, version, to: message
+  delegate type, code_class, message_id, "message_id=", token, version, to: message
 
   # ameba:disable Metrics/CyclomaticComplexity
-  def to_coap(message_type : CoAP::Message::Type = :confirmable)
-    message.type = message_type
-    message.code_class = :method
+  def to_coap
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
 
     options = self.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
