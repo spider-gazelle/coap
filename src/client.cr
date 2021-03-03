@@ -234,7 +234,13 @@ class CoAP::Client
         if responder.timeout < time
           @messages.delete(responder.message_id)
           responder.close
-          Log.trace { "message #{responder.message_id} timeout waiting for token '#{bytes.hexstring}' data" }
+          Log.trace {
+            if responder.processed > 0
+              "closing channel for token '#{bytes.hexstring}', processed #{responder.processed} messages"
+            else
+              "message #{responder.message_id} timeout waiting for token '#{bytes.hexstring}' data"
+            end
+          }
           true
         end
       end
