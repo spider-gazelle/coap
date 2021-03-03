@@ -19,4 +19,25 @@ Communicate with IoT devices supporting CoAP
 
 ## Usage
 
-coming soon
+```crystal
+
+require "coap"
+
+# client has similar semantics to HTTP::Client
+client = CoAP::Client.new(URI.parse("coap://coap.me"))
+
+# requests inherit from HTTP::Request so work the same way
+request = CoAP::Request.new("get", "/test")
+
+# use client.exec! to send a request, it returns a channel for obtaining responses
+# this is because you can multi-cast requests and each device will send a response
+response_channel = client.exec!(request)
+
+# you might only be expecting a single response
+response = response_channel.receive
+
+response.status_code # => 205
+response.headers["Content-Format"] # => "text/plain"
+response.body # => "welcome to the ETSI plugtest!"
+
+```
