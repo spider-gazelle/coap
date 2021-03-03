@@ -16,6 +16,8 @@ class CoAP::Request < HTTP::Request
 
   delegate type, code_class, message_id, "message_id=", token, version, to: message
 
+  IGNORE_HEADERS = {"Content-Length"}
+
   # ameba:disable Metrics/CyclomaticComplexity
   def to_coap
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
@@ -35,6 +37,7 @@ class CoAP::Request < HTTP::Request
     end
 
     self.headers.each do |header, values|
+      next if IGNORE_HEADERS.includes? header
       option = CoAP::Options.parse? header.gsub('-', '_')
 
       if option.nil?

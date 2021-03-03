@@ -8,7 +8,7 @@ class CoAP::Client
   alias TLSContext = OpenSSL::SSL::Context::Client | Bool | Nil
 
   # default CoAP timeout
-  @read_timeout : Float64 = 2.0
+  getter read_timeout : Float64 = 3.0
 
   def initialize(@host : String, port = nil, tls : TLSContext = nil)
     @tls = case tls
@@ -31,16 +31,17 @@ class CoAP::Client
   end
 
   @mutex = Mutex.new(:reentrant)
-  @io : IO | Nil = nil
+  @io : CoAP::IOWrapper? = nil
 
   def io=(transport : IO)
-    @mutex.synchronize { @io = transport }
+    @mutex.synchronize do
+      close if @io
+      @io = CoAP::IOWrapper.new(transport, self).start
+    end
+    transport
   end
 
-  private def io : IO
-    io = @io
-    return io if io
-
+  private def io : CoAP::IOWrapper
     @mutex.synchronize {
       io = @io
       return io if io
@@ -63,10 +64,8 @@ class CoAP::Client
         end
       end
 
-      @io = io
-      spawn { consume_io }
-      spawn { perform_timeouts }
-      io
+      @io = client_io = CoAP::IOWrapper.new(io, self).start
+      client_io
     }
   end
 
@@ -141,71 +140,67 @@ class CoAP::Client
 
   protected def transmit(message)
     response = nil
-    @mutex.synchronize {
-      if !message.token.empty? && message.type.confirmable?
+    Log.trace { "transmitting request #{message.message_id}, token #{message.token.hexstring}, type #{message.type}, class #{message.code_class}" }
+
+    if !message.token.empty? && message.type.confirmable?
+      @mutex.synchronize {
         response = ResponseHandler.new message.message_id, @read_timeout.seconds.from_now
         @tokens[message.token] = response
         @messages[message.message_id] = message.token
-      end
+      }
+    end
 
-      socket = io
-      socket.write_bytes(message)
-      socket.flush
-    }
+    io.transmit(message)
     response
   end
 
-  private def consume_io
-    if socket = @io
-      while !socket.closed?
-        message = socket.read_bytes(CoAP::Message)
+  def process_message(message : CoAP::Message)
+    Log.trace { "received message #{message.message_id}, token #{message.token.hexstring}\n#{message.inspect}" }
 
-        # Check we were expecting this message
-        token_id = @mutex.synchronize { @messages.delete(message.message_id) }
+    # Check we were expecting this message
+    token_id = @mutex.synchronize { @messages.delete(message.message_id) }
+    Log.trace { "message id #{message.message_id} #{token_id ? "expected" : "unexpected"}" }
 
-        if !message.token.empty?
-          # if it has a token then we probably were expecting this
-          if responder = @mutex.synchronize { @tokens[message.token]? }
-            responder.send(message)
-          else
-            Log.info { "CoAP message #{message.message_id}, token #{message.token.hexstring} possibly received after timeout" }
-          end
-
-          if message.type.confirmable?
-            ack = CoAP::Message.new
-            ack.type = :acknowledgement
-            ack.message_id = message.message_id
-
-            @mutex.synchronize {
-              socket.write_bytes(ack)
-              socket.flush
-            }
-          end
-        elsif token_id && message.code_class.method?
-          # we were tracking the message ID so probably the service is taking time to return the result
-          # we want to increase the timeout for the token tracking https://tools.ietf.org/html/rfc7252#page-107
-          @mutex.synchronize {
-            if responder = @tokens[token_id]?
-              responder.timeout = (@read_timeout * 5).seconds.from_now
-            else
-              Log.info { "tracked CoAP message #{message.message_id}, token #{token_id}  received after timeout" }
-            end
-          }
-        else
-          # we were not expecting this message
-          Log.info { "received unexpected CoAP message #{message.type} #{message.message_id}" }
-        end
+    if !message.token.empty?
+      # if it has a token then we probably were expecting this
+      if responder = @mutex.synchronize { @tokens[message.token]? }
+        Log.trace { "token lookup success for #{message.token.hexstring}" }
+        responder.send(message)
+      else
+        Log.info { "CoAP message #{message.message_id}, token #{message.token.hexstring} possibly received after timeout" }
       end
+
+      if message.type.confirmable?
+        Log.trace { "message #{message.message_id} required acknowledgement" }
+
+        ack = CoAP::Message.new
+        ack.type = :acknowledgement
+        ack.message_id = message.message_id
+        transmit(ack)
+      end
+    elsif token_id && message.code_class.method?
+      Log.trace { "message expected, however data not available yet" }
+
+      # we were tracking the message ID so probably the service is taking time to return the result
+      # we want to increase the timeout for the token tracking https://tools.ietf.org/html/rfc7252#page-107
+      @mutex.synchronize {
+        if responder = @tokens[token_id]?
+          Log.trace { "setting #{token_id.hexstring} timeout to #{@read_timeout * 5}" }
+          responder.timeout = (@read_timeout * 5).seconds.from_now
+        else
+          Log.info { "tracked CoAP message #{message.message_id}, token #{token_id}  received after timeout" }
+        end
+      }
+    else
+      # we were not expecting this message
+      Log.info { "received unexpected CoAP message #{message.type} #{message.message_id}" }
     end
-  rescue error
-    Log.error(exception: error) { "error consuming IO" }
-  ensure
-    close
   end
 
   def close : Nil
     @mutex.synchronize {
-      @io.try(&.close)
+      iow = @io
+      iow.close if iow && !iow.closed?
       @io = nil
 
       # close all the channels
@@ -219,7 +214,30 @@ class CoAP::Client
     @io.try(&.closed?) || true
   end
 
-  def perform_timeouts
-    # TODO::
+  def finalize
+    Log.trace { "client GC'd" }
+
+    @io.try(&.close)
+
+    # close all the channels
+    @mutex.synchronize {
+      @io = nil
+      @tokens.each_value(&.close)
+    }
+  end
+
+  def check_for_timeouts
+    time = Time.utc
+
+    @mutex.synchronize {
+      @tokens.reject! do |bytes, responder|
+        if responder.timeout < time
+          @messages.delete(responder.message_id)
+          responder.close
+          Log.trace { "message #{responder.message_id} timeout waiting for token '#{bytes.hexstring}' data" }
+          true
+        end
+      end
+    }
   end
 end

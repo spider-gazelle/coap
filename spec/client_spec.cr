@@ -1,4 +1,5 @@
 require "./spec_helper"
+require "weak_ref"
 
 module CoAP
   describe CoAP do
@@ -101,6 +102,7 @@ module CoAP
 
     it "should handle a delayed response" do
       client = CoAP::Client.new(URI.parse("coap://coap.me"))
+      client.read_timeout = 80.seconds
       response = client.exec!(CoAP::Request.new("get", "/separate")).receive
 
       response.status_code.should eq(205)
@@ -119,6 +121,8 @@ module CoAP
       response.status_code.should eq(205)
       before_req.should eq(1)
       before_mes.should eq(1)
+
+      # TODO:: test client is cleaned up automatically by GC when de-referenced
     end
   end
 end
