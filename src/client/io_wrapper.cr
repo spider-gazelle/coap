@@ -37,16 +37,16 @@ class CoAP::IOWrapper
 
     spawn(same_thread: true) { read_messages }
     loop do
-      break unless @client.value
+      break unless client_exists?
 
       select
       when output = @transmit.receive
         @io.write_bytes(output)
         @io.flush
       when input = @received.receive
-        @client.value.try(&.process_message(input))
+        client_process_message(input)
       when timeout(get_timeout)
-        @client.value.try(&.check_for_timeouts)
+        client_check_for_timeouts
       end
     end
   rescue IO::Error | Channel::ClosedError
@@ -57,13 +57,25 @@ class CoAP::IOWrapper
     close
   end
 
+  private def client_exists?
+    !@client.value.nil?
+  end
+
+  private def client_process_message(input)
+    @client.value.try(&.process_message(input))
+  end
+
+  private def client_check_for_timeouts
+    @client.value.try(&.check_for_timeouts)
+  end
+
   private def get_timeout : Time::Span
     @client.value.try(&.read_timeout.seconds) || 1.second
   end
 
   private def read_messages : Nil
     Log.trace { "started reading messages" }
-    while !@client.value.nil? && !@io.closed?
+    while client_exists? && !@io.closed?
       @received.send @io.read_bytes(CoAP::Message)
     end
   rescue IO::Error
