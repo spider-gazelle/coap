@@ -1,4 +1,4 @@
-require "../coap"
+require "../../coap"
 require "http"
 
 class CoAP::Response < HTTP::Client::Response

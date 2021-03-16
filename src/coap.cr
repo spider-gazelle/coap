@@ -72,5 +72,5 @@ module CoAP
   }.each { |number, name| register_format(name, number) }
 end
 
-require "./message"
-require "./client"
+require "./coap/message"
+require "./coap/client"

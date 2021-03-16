@@ -1,4 +1,5 @@
 require "bindata"
+require "../coap"
 
 module CoAP
   class Option < BinData

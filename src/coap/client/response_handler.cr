@@ -1,4 +1,4 @@
-require "../coap"
+require "../../coap"
 
 # Need to support multicast responses and observables
 class CoAP::ResponseHandler

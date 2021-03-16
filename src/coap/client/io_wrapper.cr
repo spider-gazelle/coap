@@ -1,4 +1,4 @@
-require "../coap"
+require "../../coap"
 require "weak_ref"
 
 # This class exists to monitor the IO for the lifetime of the client
