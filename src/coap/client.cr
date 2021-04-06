@@ -1,3 +1,4 @@
+require "dtls"
 require "../coap"
 require "./client/*"
 
@@ -13,7 +14,7 @@ class CoAP::Client
   def initialize(@host : String, port = nil, tls : TLSContext = nil)
     @tls = case tls
            when true
-             # TODO:: needs to be DTLS enabled
+             # needs to be DTLS enabled
              OpenSSL::SSL::Context::Client.new(::LibSSL.dtls_method)
            when OpenSSL::SSL::Context::Client
              tls
@@ -55,7 +56,8 @@ class CoAP::Client
       if tls = @tls
         udp_socket = io
         begin
-          io = OpenSSL::SSL::Socket::Client.new(udp_socket, context: tls, sync_close: true, hostname: @host)
+          io = DTLS::Socket::Client.new(udp_socket, context: tls, sync_close: true, hostname: @host)
+          io.sync = false
         rescue error
           Log.error(exception: error) { "starting dtls" }
           # don't leak the TCP socket when the SSL connection failed

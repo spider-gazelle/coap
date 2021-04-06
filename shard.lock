@@ -2,9 +2,13 @@ version: 2.0
 shards:
   ameba:
     git: https://github.com/veelenga/ameba.git
-    version: 0.14.0
+    version: 0.14.2
 
   bindata:
     git: https://github.com/spider-gazelle/bindata.git
-    version: 1.8.1
+    version: 1.8.3
+
+  dtls:
+    git: https://github.com/spider-gazelle/crystal-dtls.git
+    version: 0.9.0
 
