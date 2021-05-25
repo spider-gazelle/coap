@@ -1,6 +1,6 @@
 # Crystal Lang CoAP Protocol
 
-[![Build Status](https://travis-ci.com/spider-gazelle/coap.svg?branch=master)](https://travis-ci.com/github/spider-gazelle/coap)
+[![CI](https://github.com/spider-gazelle/coap/actions/workflows/ci.yml/badge.svg)](https://github.com/spider-gazelle/coap/actions/workflows/ci.yml)
 
 Communicate with IoT devices supporting CoAP
 
