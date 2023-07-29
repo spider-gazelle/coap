@@ -78,7 +78,7 @@ module CoAP
 
     def observation(number : Int)
       write_integer(number, max_size: 3)
-      self
+      type(Options::Observe)
     end
 
     # https://datatracker.ietf.org/doc/html/rfc7959#section-2.2
@@ -122,7 +122,7 @@ module CoAP
     def content_type(string : String)
       number = CONTENT_FORMAT[string.split(';', 2)[0]]
       write_integer(number, max_size: 2)
-      self
+      type(Options::Content_Format)
     end
 
     def content_type
@@ -136,7 +136,7 @@ module CoAP
 
     def max_age(number : Int)
       write_integer(number, max_size: 4)
-      self
+      type(Options::Max_Age)
     end
 
     # https://tools.ietf.org/html/rfc7252#section-5.10
@@ -146,7 +146,7 @@ module CoAP
 
     def uri_port(number : Int)
       write_integer(number, max_size: 2)
-      self
+      type(Options::Uri_Port)
     end
 
     def string

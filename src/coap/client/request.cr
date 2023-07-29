@@ -30,7 +30,7 @@ class CoAP::Request < HTTP::Request
       port = uri.port || default_port || raise("unable to infer CoAP port for #{origin}")
 
       options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host)
-      options << CoAP::Option.new.uri_port(port).type(CoAP::Options::Uri_Port) unless port == default_port
+      options << CoAP::Option.new.uri_port(port) unless port == default_port
     else
       raise "no 'Origin' header provided"
     end

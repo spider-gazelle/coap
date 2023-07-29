@@ -132,7 +132,7 @@ class CoAP::Message < CoAP::Header
   def uri=(uri : URI)
     options = [] of CoAP::Option
     options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host) if uri.host.presence
-    options << CoAP::Option.new.string(uri.port.as(Int32)).type(CoAP::Options::Uri_Port) if uri.port
+    options << CoAP::Option.new.uri_port(uri.port.as(Int32)) if uri.port
     options.concat uri.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
     if params = uri.params
       params.each do |param, value|
