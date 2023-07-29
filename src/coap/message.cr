@@ -93,6 +93,12 @@ class CoAP::Message < CoAP::Header
     MethodCode.from_value(code_detail)
   end
 
+  def method=(verb : MethodCode)
+    self.code_class = CodeClass::Method
+    self.code_detail = verb.to_u8
+    verb
+  end
+
   # https://tools.ietf.org/html/rfc7252#section-12.2
   getter options : Array(Option) do
     option_number = 0
