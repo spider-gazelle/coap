@@ -63,14 +63,15 @@ class CoAP::Message < CoAP::Header
   bytes :payload_data, length: ->{ io.peek.try(&.size) || 0 }
 
   # ensure options are written accurately
-  protected def __perform_write__(io : IO) : IO
+  def to_io(io : IO, format : IO::ByteFormat = IO::ByteFormat::SystemEndian) : Nil
     option_number = 0
 
     # binary formatted
-    self.raw_options = options.map do |option|
+    self.raw_options = options.sort!.map do |option|
       # Calculate the delta
+      # Multiple instances of the same option can be included by using a delta of zero.
       header_int = option.type.to_i
-      delta = header_int - option_number
+      delta = option_number == header_int ? 0 : (header_int - option_number)
       option_number = header_int
 
       # Ensure lengths are correct
@@ -88,7 +89,7 @@ class CoAP::Message < CoAP::Header
     end
 
     # write the data to the IO
-    previous_def(io)
+    super(io, format)
   end
 
   def status_code
