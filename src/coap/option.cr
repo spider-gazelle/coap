@@ -81,6 +81,39 @@ module CoAP
       self
     end
 
+    # https://datatracker.ietf.org/doc/html/rfc7959#section-2.2
+    struct Block
+      property number : UInt32
+      property? more : Bool
+      property szx : Int32
+
+      def size
+        2**(@szx + 4)
+      end
+
+      def initialize(@number, @more = false, @szx = 0b110)
+      end
+    end
+
+    # https://datatracker.ietf.org/doc/html/rfc7959#section-2.2
+    def block
+      # blocks are max 3 bytes
+      raw = parse_integer(max_size: 3)
+      number = raw >> 4
+      more = (raw & 0b1000) > 0
+      szx = raw & 0b111
+
+      Block.new(number, more, szx)
+    end
+
+    def block(block : Block)
+      number = block.number << 4
+      number = number & (block.more? ? 0b1000 : 0)
+      number = number & (block.szx & 0b111)
+      write_integer(number, max_size: 3)
+      self
+    end
+
     # https://tools.ietf.org/html/rfc7252#section-12.3
     def content_type(string : String)
       number = CONTENT_FORMAT[string.split(';', 2)[0]]
