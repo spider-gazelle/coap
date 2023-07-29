@@ -99,6 +99,53 @@ class CoAP::Message < CoAP::Header
     verb
   end
 
+  getter uri : URI do
+    host = nil
+    port = nil
+    path = "/"
+
+    query = URI::Params.build do |param|
+      self.options.each do |option|
+        case option.type
+        when .uri_path?
+          path = "#{path}#{URI.encode_path_segment(option.string)}/"
+        when .uri_query?
+          parts = option.string.split("=", 2)
+          param.add parts[0], parts[1]?
+        when .uri_host?
+          host = option.string
+        when .uri_port?
+          port = option.uri_port
+        end
+      end
+    end
+
+    URI.new(
+      scheme: "coap",
+      host: host,
+      port: port.try(&.to_i32),
+      path: path,
+      query: query
+    )
+  end
+
+  def uri=(uri : URI)
+    options = [] of CoAP::Option
+    options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host) if uri.host.presence
+    options << CoAP::Option.new.string(uri.port.as(Int32)).type(CoAP::Options::Uri_Port) if uri.port
+    options.concat uri.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
+    if params = uri.params
+      params.each do |param, value|
+        if value.presence
+          param = "#{param}=#{value}"
+        end
+        options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
+      end
+    end
+    @options = options
+    @uri = uri
+  end
+
   # https://tools.ietf.org/html/rfc7252#section-12.2
   getter options : Array(Option) do
     option_number = 0

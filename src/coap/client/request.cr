@@ -21,10 +21,9 @@ class CoAP::Request < HTTP::Request
   # ameba:disable Metrics/CyclomaticComplexity
   def to_coap
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
+    options = [] of CoAP::Option
 
-    options = self.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
-    options << CoAP::Option.new.string(self.query.as(String)).type(CoAP::Options::Uri_Query) if self.query.presence
-
+    # Host and port
     if origin = self.headers.delete("Origin")
       uri = URI.parse origin
       default_port = URI.default_port(uri.scheme.as(String).downcase)
@@ -34,6 +33,17 @@ class CoAP::Request < HTTP::Request
       options << CoAP::Option.new.uri_port(port).type(CoAP::Options::Uri_Port) unless port == default_port
     else
       raise "no 'Origin' header provided"
+    end
+
+    # query path
+    options.concat self.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
+
+    # query params
+    self.query_params.each do |param, value|
+      if value.presence
+        param = "#{param}=#{value}"
+      end
+      options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
     end
 
     self.headers.each do |header, values|
