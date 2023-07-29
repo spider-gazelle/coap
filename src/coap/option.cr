@@ -85,13 +85,13 @@ module CoAP
     struct Block
       property number : UInt32
       property? more : Bool
-      property szx : Int32
+      property szx : UInt32
 
       def size
         2**(@szx + 4)
       end
 
-      def initialize(@number, @more = false, @szx = 0b110)
+      def initialize(@number, @more = false, @szx = 0b110_u32)
       end
     end
 
