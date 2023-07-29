@@ -112,8 +112,8 @@ module CoAP
 
     def block(block : Block)
       number = block.number << 4
-      number = number & (block.more? ? 0b1000 : 0)
-      number = number & (block.szx & 0b111)
+      number = number | (block.more? ? 0b1000 : 0)
+      number = number | (block.szx & 0b111)
       write_integer(number, max_size: 3)
       self
     end
