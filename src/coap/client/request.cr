@@ -23,14 +23,14 @@ class CoAP::Request < HTTP::Request
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
 
     options = self.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
-    options << CoAP::Option.new.string(self.query.not_nil!).type(CoAP::Options::Uri_Query) if self.query.presence
+    options << CoAP::Option.new.string(self.query.as(String)).type(CoAP::Options::Uri_Query) if self.query.presence
 
     if origin = self.headers.delete("Origin")
       uri = URI.parse origin
-      default_port = URI.default_port(uri.scheme.not_nil!.downcase)
+      default_port = URI.default_port(uri.scheme.as(String).downcase)
       port = uri.port || default_port || raise("unable to infer CoAP port for #{origin}")
 
-      options << CoAP::Option.new.string(uri.host.not_nil!).type(CoAP::Options::Uri_Host)
+      options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host)
       options << CoAP::Option.new.uri_port(port).type(CoAP::Options::Uri_Port) unless port == default_port
     else
       raise "no 'Origin' header provided"
@@ -79,7 +79,7 @@ class CoAP::Request < HTTP::Request
       # Extract the payload
       buffer = IO::Memory.new
       buf = Bytes.new(64)
-      while ((bytes = data.read(buf)) > 0)
+      while (bytes = data.read(buf)) > 0
         buffer.write(buf[0, bytes])
       end
       message.payload_data = buffer.to_slice

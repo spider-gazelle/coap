@@ -25,10 +25,10 @@ class CoAP::Client
   end
 
   def self.new(uri : URI, tls : TLSContext = nil)
-    scheme = uri.scheme.not_nil!.downcase
+    scheme = uri.scheme.as(String).downcase
     port = uri.port || URI.default_port(scheme) || raise("unable to infer CoAP port for #{uri}")
     raise "TLS required for coaps" if tls == false && scheme == "coaps"
-    self.new(uri.host.not_nil!, port, tls)
+    self.new(uri.host.as(String), port, tls)
   end
 
   @mutex = Mutex.new(:reentrant)
@@ -131,7 +131,7 @@ class CoAP::Client
   end
 
   def exec!(request : CoAP::Request) : CoAP::ResponseHandler
-    exec(request).not_nil!
+    exec(request).as(CoAP::ResponseHandler)
   end
 
   # message_id => token id

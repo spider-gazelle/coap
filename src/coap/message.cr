@@ -5,8 +5,7 @@ require "./option"
 # coap://  default port 5683
 # coaps:// default port 5684
 
-# https://tools.ietf.org/html/rfc7252#section-3
-class CoAP::Message < BinData
+class CoAP::Header < BinData
   endian big
 
   enum Type
@@ -25,7 +24,14 @@ class CoAP::Message < BinData
     enum_bits 2, type : Type = Type::Confirmable
 
     bits 4, :token_length, value: ->{ token.size.to_u8 }
+  end
+end
 
+# https://tools.ietf.org/html/rfc7252#section-3
+class CoAP::Message < CoAP::Header
+  endian big
+
+  bit_field do
     # https://tools.ietf.org/html/rfc7252#section-12.1
     enum_bits 3, code_class : CodeClass = CodeClass::Method
 
