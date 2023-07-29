@@ -62,6 +62,35 @@ class CoAP::Message < CoAP::Header
 
   bytes :payload_data, length: ->{ io.peek.try(&.size) || 0 }
 
+  # ensure options are written accurately
+  protected def __perform_write__(io : IO) : IO
+    option_number = 0
+
+    # binary formatted
+    self.raw_options = options.map do |option|
+      # Calculate the delta
+      header_int = option.type.to_i
+      delta = header_int - option_number
+      option_number = header_int
+
+      # Ensure lengths are correct
+      option.option_length = option.data.bytesize
+      option.option_delta = delta
+      option
+    end
+
+    # add the end of options flags only if required
+    if self.payload_data.size > 0
+      option = Option.new
+      option.op_delta = 15_u8
+      option.op_length = 15_u8
+      self.raw_options << option
+    end
+
+    # write the data to the IO
+    previous_def(io)
+  end
+
   def status_code
     (code_class.to_i * 100) + code_detail.to_i
   end
@@ -139,7 +168,8 @@ class CoAP::Message < CoAP::Header
   def uri=(uri : URI)
     options = [] of CoAP::Option
     options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host) if uri.host.presence
-    options << CoAP::Option.new.uri_port(uri.port.as(Int32)) if uri.port
+    default_port = uri.scheme.presence ? URI.default_port(uri.scheme.as(String).downcase) : 5683
+    options << CoAP::Option.new.uri_port(uri.port.as(Int32)) if uri.port && uri.port != default_port
     options.concat uri.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
     uri.query_params.each do |param, value|
       if value.presence
@@ -153,7 +183,7 @@ class CoAP::Message < CoAP::Header
   end
 
   # https://tools.ietf.org/html/rfc7252#section-12.2
-  getter options : Array(Option) do
+  property options : Array(Option) do
     option_number = 0
     raw_options.compact_map { |option|
       next if option.end_of_options?
@@ -166,37 +196,5 @@ class CoAP::Message < CoAP::Header
         nil
       end
     }
-  end
-
-  # allow for reasonablly flexible header parsing
-  def options=(values : Enumerable(Option))
-    option_number = 0
-
-    # Exposed data
-    @options = options
-
-    # binary formatted
-    self.raw_options = options.map do |option|
-      # Calculate the delta
-      header_int = option.type.to_i
-      delta = header_int - option_number
-      option_number = header_int
-
-      # Ensure lengths are correct
-      option.option_length = option.data.bytesize
-      option.option_delta = delta
-      option
-    end
-
-    # add the end of options flags only if required
-    if self.payload_data.size > 0
-      option = Option.new
-      option.op_delta = 15_u8
-      option.op_length = 15_u8
-      self.raw_options << option
-    end
-
-    # return the options as a call to `options` would return
-    options
   end
 end

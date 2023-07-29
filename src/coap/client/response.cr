@@ -25,6 +25,9 @@ class CoAP::Response < HTTP::Client::Response
         headers.add(header_key, option.string)
       when .e_tag?
         headers.add(header_key, option.data.hexstring)
+      when .block1?, .block2?
+        block = option.block
+        headers.add(header_key, "#{block.number}/#{block.more?}/#{block.size}")
       else
         Log.warn { "unexpected CoAP header: #{option.type}" }
         headers.add(header_key, option.data.hexstring)
