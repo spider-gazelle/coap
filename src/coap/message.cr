@@ -43,11 +43,18 @@ class CoAP::Message < CoAP::Header
   bytes :token, length: ->{ token_length }
 
   variable_array raw_options : Option, read_next: ->{
-    if opt = raw_options[-1]?
-      !opt.end_of_options?
-    elsif remaining = io.peek
+    if remaining = io.peek
       # Are we EOF?
-      remaining.size > 0
+      if remaining.size > 0
+        # are we end of options?
+        if opt = raw_options[-1]?
+          !opt.end_of_options?
+        else
+          true
+        end
+      else
+        false
+      end
     else
       false
     end
