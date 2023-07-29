@@ -134,13 +134,11 @@ class CoAP::Message < CoAP::Header
     options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host) if uri.host.presence
     options << CoAP::Option.new.uri_port(uri.port.as(Int32)) if uri.port
     options.concat uri.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
-    if params = uri.params
-      params.each do |param, value|
-        if value.presence
-          param = "#{param}=#{value}"
-        end
-        options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
+    uri.query_params.each do |param, value|
+      if value.presence
+        param = "#{param}=#{value}"
       end
+      options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
     end
     @options = options
     @uri = uri
