@@ -93,6 +93,10 @@ module CoAP
 
       def initialize(@number, @more = false, @szx = 0b110_u32)
       end
+
+      def to_option(type : CoAP::Options = CoAP::Options::Block1)
+        Option.new.block(self).type(type)
+      end
     end
 
     # https://datatracker.ietf.org/doc/html/rfc7959#section-2.2
