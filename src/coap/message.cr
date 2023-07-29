@@ -141,6 +141,7 @@ class CoAP::Message < CoAP::Header
       options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
     end
     @options = options
+    self.options = options
     @uri = uri
   end
 
@@ -165,7 +166,7 @@ class CoAP::Message < CoAP::Header
     option_number = 0
 
     # Exposed data
-    @options = options = values.to_a.sort
+    @options = options
 
     # binary formatted
     self.raw_options = options.map do |option|
