@@ -59,10 +59,12 @@ class CoAP::Message < CoAP::Header
     (code_class.to_i * 100) + code_detail.to_i
   end
 
-  def status_code=(value : Int | HTTP::Status | ResponseCodes)
+  def status_code=(value : Int | HTTP::Status | ResponseCode)
     code = case value
            when HTTP::Status::ACCEPTED
-             ResponseCodes::Valid.to_i
+             ResponseCode::Valid.to_i
+           when HTTP::Status::CONTINUE
+             ResponseCode::Continue.to_i
            else
              value.to_i
            end
@@ -75,10 +77,10 @@ class CoAP::Message < CoAP::Header
   # These do actually differ slightly from the HTTP originals
   # https://www.iana.org/assignments/core-parameters/core-parameters.xhtml#response-codes
   def status
-    ResponseCodes.from_value(status_code)
+    ResponseCode.from_value(status_code)
   end
 
-  def status=(value : Int | HTTP::Status | ResponseCodes)
+  def status=(value : Int | HTTP::Status | ResponseCode)
     self.status_code = value
   end
 

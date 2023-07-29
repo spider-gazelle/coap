@@ -27,12 +27,15 @@ module CoAP
     IPATCH
   end
 
-  enum ResponseCodes
+  enum ResponseCode
     Created = 201
     Deleted = 202
     Valid   = 203
     Changed = 204
     Content = 205
+
+    # send the next part
+    Continue = 231
 
     BadRequest       = 400
     Unauthorized     = 401
@@ -42,6 +45,8 @@ module CoAP
     MethodNotAllowed = 405
     NotAcceptable    = 406
 
+    # has not received the blocks of the request body that it needs to proceed
+    RequestEntityIncomplete  = 408
     PreconditionFailed       = 412
     RequestEntityTooLarge    = 413
     UnsupportedContentFormat = 415
