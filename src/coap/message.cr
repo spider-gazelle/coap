@@ -21,7 +21,7 @@ class CoAP::Header < BinData
     # Should always be 1
     bits 2, :version, value: ->{ 1_u8 }
     # https://tools.ietf.org/html/rfc7252#section-4.3
-    enum_bits 2, type : Type = Type::Confirmable
+    bits 2, type : Type = Type::Confirmable
 
     bits 4, :token_length, value: ->{ token.size.to_u8 }
   end
@@ -33,16 +33,16 @@ class CoAP::Message < CoAP::Header
 
   bit_field do
     # https://tools.ietf.org/html/rfc7252#section-12.1
-    enum_bits 3, code_class : CodeClass = CodeClass::Method
+    bits 3, code_class : CodeClass = CodeClass::Method
 
     # When code_class above == Method then this indicates if it's a GET POST etc
     bits 5, :code_detail
   end
 
-  uint16 :message_id
-  bytes :token, length: ->{ token_length }
+  field message_id : UInt16
+  field token : Bytes, length: ->{ token_length }
 
-  variable_array raw_options : Option, read_next: ->{
+  field raw_options : Array(Option), read_next: ->{
     if remaining = io.peek
       # Are we EOF?
       if remaining.size > 0
@@ -60,7 +60,7 @@ class CoAP::Message < CoAP::Header
     end
   }
 
-  bytes :payload_data, length: ->{ io.peek.try(&.size) || 0 }
+  field payload_data : Bytes, length: ->{ io.peek.try(&.size) || 0 }
 
   # ensure options are written accurately
   def to_io(io : IO, format : IO::ByteFormat = IO::ByteFormat::SystemEndian) : Nil

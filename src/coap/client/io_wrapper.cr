@@ -49,7 +49,8 @@ class CoAP::IOWrapper
         client_check_for_timeouts
       end
     end
-  rescue IO::Error | Channel::ClosedError
+  rescue error : IO::Error | Channel::ClosedError
+    Log.error(exception: error) { "IO error send" }
   rescue error
     Log.error(exception: error) { "error processing IO" }
   ensure
@@ -78,9 +79,10 @@ class CoAP::IOWrapper
     while client_exists? && !@io.closed?
       @received.send @io.read_bytes(CoAP::Message)
     end
-  rescue IO::Error
+  rescue error : IO::Error
+    Log.error(exception: error) { "IO error" }
   rescue error
-    Log.error(exception: error) { "error consuming IO" } unless error.cause.is_a?(IO::Error)
+    Log.error(exception: error) { "error consuming IO" } # unless error.cause.is_a?(IO::Error)
   ensure
     Log.trace { "stopped reading messages" }
     close

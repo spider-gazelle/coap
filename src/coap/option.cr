@@ -12,8 +12,8 @@ module CoAP
     end
 
     {% for name in [:delta, :length] %}
-      uint8 {{name}}_8bit, onlyif: ->{ op_{{name.id}} == 13_u8 }
-      uint16 {{name}}_16bit, onlyif: ->{ op_{{name.id}} == 14_u8 }
+      field {{name.id}}_8bit : UInt8, onlyif: ->{ op_{{name.id}} == 13_u8 }
+      field {{name.id}}_16bit : UInt16, onlyif: ->{ op_{{name.id}} == 14_u8 }
 
       def option_{{name.id}} : Int32
         case op_{{name.id}}
@@ -46,7 +46,7 @@ module CoAP
       end
     {% end %}
 
-    bytes :data, length: ->{ op_length == 15_u8 ? 0 : option_length }
+    field data : Bytes, length: ->{ op_length == 15_u8 ? 0 : option_length }
 
     def end_of_options?
       op_delta == 0xF_u8 && op_length == 0xF_u8
