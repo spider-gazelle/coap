@@ -4,10 +4,8 @@ require "weak_ref"
 module CoAP
   describe CoAP do
     it "should generate a basic coap request" do
-      request = CoAP::Request.new("get", "/testing", HTTP::Headers{
-        "Origin" => "coap://test.server.com",
-      })
-      message = request.to_coap
+      request = CoAP::Request.new("get", "/testing")
+      message = request.to_coap("test.server.com", 5683, "coap")
 
       message.type.should eq(Message::Type::Confirmable)
       message.code_class.should eq(CodeClass::Method)
@@ -23,11 +21,10 @@ module CoAP
 
     it "should generate a complex coap request" do
       request = CoAP::Request.new("post", "/testing?arg=1", HTTP::Headers{
-        "Origin"         => "coaps://test.server.com",
         "Content-Format" => "application/json",
       }, %({"temp": "22.5 C"}))
       request.message_id = 2_u16
-      message = request.to_coap
+      message = request.to_coap("test.server.com", 5684, "coaps")
 
       message.type.should eq(Message::Type::Confirmable)
       message.code_class.should eq(CodeClass::Method)

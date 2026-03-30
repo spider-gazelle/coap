@@ -17,7 +17,11 @@ class CoAP::Response < HTTP::Client::Response
       header_key = option.type.to_s.gsub('_', '-')
 
       case option.type
-      when .observe?, .max_age?, .size1?, .uri_port?
+      when .observe?
+        headers.add(header_key, option.observation.to_s)
+      when .uri_port?
+        headers.add(header_key, option.uri_port.to_s)
+      when .max_age?, .size1?
         headers.add(header_key, option.max_age.to_s)
       when .content_format?, .accept?
         headers.add(header_key, option.content_type)
@@ -35,6 +39,7 @@ class CoAP::Response < HTTP::Client::Response
     end
 
     body = String.new(message.payload_data).presence
+    headers["Content-Length"] = (body.try(&.bytesize) || 0).to_s
 
     resp = CoAP::Response.new(status_code, body, headers)
     resp.message = message

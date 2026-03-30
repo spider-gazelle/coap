@@ -1,0 +1,6 @@
+# Exclude type declarations from useless assign checks.
+# BinData macros (field, bits) accept TypeDeclaration arguments
+# which ameba incorrectly flags as useless assignments.
+# See: https://github.com/crystal-ameba/ameba/pull/800
+Lint/UselessAssign:
+  ExcludeTypeDeclarations: true

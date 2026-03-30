@@ -16,7 +16,6 @@ class CoAP::IOWrapper
     @transmit.close
     @received.close
     @io.close
-    @client.value.try &.close
   end
 
   def closed?
@@ -58,20 +57,24 @@ class CoAP::IOWrapper
     close
   end
 
+  private def with_client(&)
+    @client.value.try { |client| yield client }
+  end
+
   private def client_exists?
     !@client.value.nil?
   end
 
   private def client_process_message(input)
-    @client.value.try(&.process_message(input))
+    with_client(&.process_message(input))
   end
 
   private def client_check_for_timeouts
-    @client.value.try(&.check_for_timeouts)
+    with_client(&.check_for_timeouts)
   end
 
   private def get_timeout : Time::Span
-    @client.value.try(&.read_timeout.seconds) || 1.second
+    with_client(&.read_timeout.seconds) || 1.second
   end
 
   private def read_messages : Nil

@@ -16,35 +16,25 @@ class CoAP::Request < HTTP::Request
 
   delegate type, code_class, message_id, "message_id=", token, version, to: message
 
-  IGNORE_HEADERS = {"Content-Length"}
+  IGNORE_HEADERS = {"Content-Length", "Origin"}
 
-  # ameba:disable Metrics/CyclomaticComplexity
+  # Backward-compatible: reads host/port/scheme from Origin header
   def to_coap
+    if origin = self.headers["Origin"]?
+      uri = URI.parse origin
+      to_coap(uri.host.as(String), uri.port || URI.default_port(uri.scheme.as(String).downcase) || 5683, uri.scheme.as(String))
+    else
+      raise "no 'Origin' header provided and no host/port/scheme given"
+    end
+  end
+
+  def to_coap(host : String, port : Int32, scheme : String)
     message.code_detail = CoAP::MethodCode.parse(self.method.upcase).to_u8
     options = [] of CoAP::Option
 
-    # Host and port
-    if origin = self.headers.delete("Origin")
-      uri = URI.parse origin
-      default_port = URI.default_port(uri.scheme.as(String).downcase)
-      port = uri.port || default_port || raise("unable to infer CoAP port for #{origin}")
-
-      options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host)
-      options << CoAP::Option.new.uri_port(port) unless port == default_port
-    else
-      raise "no 'Origin' header provided"
-    end
-
-    # query path
-    options.concat self.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
-
-    # query params
-    self.query_params.each do |param, value|
-      if value.presence
-        param = "#{param}=#{value}"
-      end
-      options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
-    end
+    # Build a URI for Option.from_uri
+    request_uri = URI.new(scheme: scheme, host: host, port: port, path: self.path, query: self.query_params.to_s.presence)
+    options.concat CoAP::Option.from_uri(request_uri)
 
     self.headers.each do |header, values|
       next if IGNORE_HEADERS.includes? header
@@ -57,20 +47,19 @@ class CoAP::Request < HTTP::Request
 
       case option
       when .if_none_match?, .observe?
-        # empty
-        values.each { |_data| options << CoAP::Option.new.type(option) }
+        values.each { |_data| options << CoAP::Option.new.of_type(option) }
       when .content_format?, .accept?
-        values.each { |data| options << CoAP::Option.new.content_type(data).type(option) }
+        values.each { |data| options << CoAP::Option.new.content_type(data).of_type(option) }
       when .max_age?, .size1?
-        values.each { |data| options << CoAP::Option.new.max_age(data.to_u32).type(option) }
+        values.each { |data| options << CoAP::Option.new.max_age(data.to_u32).of_type(option) }
       when .proxy_uri?, .proxy_scheme?
-        values.each { |data| options << CoAP::Option.new.string(data).type(option) }
+        values.each { |data| options << CoAP::Option.new.string(data).of_type(option) }
       when .if_match?, .e_tag?
         values.each do |data|
           if raw = data.hexbytes?
-            options << CoAP::Option.new.data(raw).type(option)
+            options << CoAP::Option.new.set_data(raw).of_type(option)
           else
-            options << CoAP::Option.new.string(data).type(option)
+            options << CoAP::Option.new.string(data).of_type(option)
           end
         end
       else
@@ -78,27 +67,15 @@ class CoAP::Request < HTTP::Request
       end
     end
 
-    # Read the data out of the IO
+    # Read the body
     self.body.try do |data|
-      # rewind if implemented
-      begin
-        data.rewind
-      rescue
-      end
-
-      # Extract the payload
+      data.rewind rescue nil
       buffer = IO::Memory.new
-      buf = Bytes.new(64)
-      while (bytes = data.read(buf)) > 0
-        buffer.write(buf[0, bytes])
-      end
+      IO.copy(data, buffer)
       message.payload_data = buffer.to_slice
     end
 
-    # Set options after payload is configured
-    # as we need to know if we need the "end of options" option flag
     message.options = options
-
     message
   end
 end

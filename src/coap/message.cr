@@ -19,11 +19,11 @@ class CoAP::Header < BinData
 
   bit_field do
     # Should always be 1
-    bits 2, :version, value: ->{ 1_u8 }
+    bits 2, :version, value: -> { 1_u8 }
     # https://tools.ietf.org/html/rfc7252#section-4.3
     bits 2, type : Type = Type::Confirmable
 
-    bits 4, :token_length, value: ->{ token.size.to_u8 }
+    bits 4, :token_length, value: -> { token.size.to_u8 }
   end
 end
 
@@ -40,9 +40,9 @@ class CoAP::Message < CoAP::Header
   end
 
   field message_id : UInt16
-  field token : Bytes, length: ->{ token_length }
+  field token : Bytes, length: -> { token_length }
 
-  field raw_options : Array(Option), read_next: ->{
+  field raw_options : Array(Option), read_next: -> {
     if remaining = io.peek
       # Are we EOF?
       if remaining.size > 0
@@ -60,37 +60,13 @@ class CoAP::Message < CoAP::Header
     end
   }
 
-  field payload_data : Bytes, length: ->{ io.peek.try(&.size) || 0 }
+  field payload_data : Bytes, length: -> { io.peek.try(&.size) || 0 }
 
-  # ensure options are written accurately
-  def to_io(io : IO, format : IO::ByteFormat = IO::ByteFormat::SystemEndian) : Nil
-    option_number = 0
+  # Eagerly parse raw_options into typed options after reading from wire
+  after_deserialize { @options = parse_options }
 
-    # binary formatted
-    self.raw_options = options.sort!.map do |option|
-      # Calculate the delta
-      # Multiple instances of the same option can be included by using a delta of zero.
-      header_int = option.type.to_i
-      delta = option_number == header_int ? 0 : (header_int - option_number)
-      option_number = header_int
-
-      # Ensure lengths are correct
-      option.option_length = option.data.bytesize
-      option.option_delta = delta
-      option
-    end
-
-    # add the end of options flags only if required
-    if self.payload_data.size > 0
-      option = Option.new
-      option.op_delta = 15_u8
-      option.op_length = 15_u8
-      self.raw_options << option
-    end
-
-    # write the data to the IO
-    super(io, format)
-  end
+  # Recompute raw_options from typed options before writing to wire
+  before_serialize { prepare_options_for_write }
 
   def status_code
     (code_class.to_i * 100) + code_detail.to_i
@@ -98,8 +74,6 @@ class CoAP::Message < CoAP::Header
 
   def status_code=(value : Int | HTTP::Status | ResponseCode)
     code = case value
-           when HTTP::Status::ACCEPTED
-             ResponseCode::Valid.to_i
            when HTTP::Status::CONTINUE
              ResponseCode::Continue.to_i
            else
@@ -139,13 +113,13 @@ class CoAP::Message < CoAP::Header
   getter uri : URI do
     host = nil
     port = nil
-    path = "/"
+    segments = [] of String
 
     query = URI::Params.build do |param|
       self.options.each do |option|
         case option.type
         when .uri_path?
-          path = "#{path}#{URI.encode_path_segment(option.string)}/"
+          segments << URI.encode_path_segment(option.string)
         when .uri_query?
           parts = option.string.split("=", 2)
           param.add parts[0], parts[1]?
@@ -157,6 +131,8 @@ class CoAP::Message < CoAP::Header
       end
     end
 
+    path = segments.empty? ? "/" : "/#{segments.join('/')}"
+
     URI.new(
       scheme: "coap",
       host: host,
@@ -167,31 +143,42 @@ class CoAP::Message < CoAP::Header
   end
 
   def uri=(uri : URI)
-    options = [] of CoAP::Option
-    options << CoAP::Option.new.string(uri.host.as(String)).type(CoAP::Options::Uri_Host) if uri.host.presence
-    default_port = uri.scheme.presence ? URI.default_port(uri.scheme.as(String).downcase) : 5683
-    options << CoAP::Option.new.uri_port(uri.port.as(Int32)) if uri.port && uri.port != default_port
-    options.concat uri.path.split('/').compact_map { |segment| CoAP::Option.new.string(segment).type(CoAP::Options::Uri_Path) if segment.presence }
-    uri.query_params.each do |param, value|
-      if value.presence
-        param = "#{param}=#{value}"
-      end
-      options << CoAP::Option.new.string(param).type(CoAP::Options::Uri_Query)
-    end
-    @options = options
-    self.options = options
+    self.options = Option.from_uri(uri)
     @uri = uri
   end
 
   # https://tools.ietf.org/html/rfc7252#section-12.2
-  property options : Array(Option) do
+  property options : Array(Option) = [] of Option
+
+  private def prepare_options_for_write
+    option_number = 0
+
+    self.raw_options = options.sort!.map do |option|
+      header_int = option.type.to_i
+      delta = option_number == header_int ? 0 : (header_int - option_number)
+      option_number = header_int
+
+      option.option_length = option.data.bytesize
+      option.option_delta = delta
+      option
+    end
+
+    if self.payload_data.size > 0
+      marker = Option.new
+      marker.op_delta = 15_u8
+      marker.op_length = 15_u8
+      self.raw_options << marker
+    end
+  end
+
+  private def parse_options : Array(Option)
     option_number = 0
     raw_options.compact_map { |option|
       next if option.end_of_options?
-      option_number += option.op_delta.to_i
+      option_number += option.option_delta
 
       begin
-        option.type Options.from_value(option_number)
+        option.of_type Options.from_value(option_number)
       rescue error
         Log.warn(exception: error) { "unable to parse option #{option_number} with delta #{option.op_delta} data size #{option.data.size}" }
         nil

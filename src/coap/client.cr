@@ -81,24 +81,19 @@ class CoAP::Client
     self.read_timeout = read_timeout.total_seconds
   end
 
-  @message_id : UInt16 = rand(UInt16::MAX).to_u16
+  @message_id : UInt16 = Random::Secure.rand(UInt16)
 
   private def next_message_id
-    @message_id += rand(10).to_u16
-  rescue OverflowError
-    @message_id = rand(10).to_u16
-  ensure
-    @message_id
+    @message_id &+= 1_u16
   end
 
-  @token : UInt8 = rand(UInt8::MAX).to_u8
+  @token_counter : UInt32 = Random::Secure.rand(UInt32)
 
-  private def next_token
-    @token += rand(5).to_u8
-  rescue OverflowError
-    @token = rand(5).to_u8
-  ensure
-    @token
+  private def next_token : Bytes
+    @token_counter &+= 1_u32
+    io = IO::Memory.new(4)
+    io.write_bytes(@token_counter, IO::ByteFormat::BigEndian)
+    io.to_slice
   end
 
   def before_request(&callback : CoAP::Request ->)
@@ -116,16 +111,15 @@ class CoAP::Client
   def exec(request : CoAP::Request) : CoAP::ResponseHandler?
     @before_request.try &.each &.call(request)
 
-    headers = request.headers
-    headers["Origin"] = "#{@tls ? "coaps" : "coap"}://#{@host}:#{@port}" unless headers["Origin"]?
+    scheme = @tls ? "coaps" : "coap"
 
     # send the request
-    message = request.to_coap
+    message = request.to_coap(@host, @port, scheme)
     @before_transmit.try &.each &.call(message)
 
     # setup tracking if at defaults
     message.message_id = next_message_id if message.message_id == 0_u16
-    message.token = Bytes[next_token] if message.token.empty? && message.type.confirmable?
+    message.token = next_token if message.token.empty? && message.type.confirmable?
 
     transmit(message)
   end
@@ -202,8 +196,8 @@ class CoAP::Client
   def close : Nil
     @mutex.synchronize {
       iow = @io
-      iow.close if iow && !iow.closed?
       @io = nil
+      iow.close if iow && !iow.closed?
 
       # close all the channels
       @tokens.each_value(&.close)
@@ -217,15 +211,7 @@ class CoAP::Client
   end
 
   def finalize
-    Log.trace { "client GC'd" }
-
-    @io.try(&.close)
-
-    # close all the channels
-    @mutex.synchronize {
-      @io = nil
-      @tokens.each_value(&.close)
-    }
+    close
   end
 
   def check_for_timeouts
